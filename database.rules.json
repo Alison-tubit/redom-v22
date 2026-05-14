@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "admin_settings": {
+      ".read": true,
+      ".write": true
+    },
+    "khatian_records": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

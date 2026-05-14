@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+
+<html lang="bn">
+<head>
+<!-- =========================================================
+       BASIC PAGE SETUP
+       - Sets character encoding, responsive viewport, page title
+       - Loads Font Awesome icons and Bengali Google Font
+  ========================================================== -->
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DLRMS | খতিয়ান পরিদর্শন</title>
+<link rel="icon" type="image/png" href="assets/images/download (1).png">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="assets/css/details.css" rel="stylesheet"/>
+</head>
+<body>
+<!-- =========================================================
+       TOP DATE BAR
+       - Date text is inserted automatically by JavaScript
+  ========================================================== -->
+<div class="top-date" id="autoDate"></div>
+<!-- =========================================================
+       HEADER SECTION
+       - Logo link
+       - Cart button
+       - Three-dot menu button and menu items
+  ========================================================== -->
+<header class="header">
+<a aria-label="লোগো লিংক" class="logo-box" href="https://dlrms.land.gov.bd/" rel="noopener" target="_blank">
+<img alt="লোগো" src="assets/images/logo.png"/>
+</a>
+<!-- Desktop navigation: only visible on laptop/PC size -->
+<nav aria-label="ডেস্কটপ মেনু" class="desktop-nav">
+<a href="https://land.gov.bd/" rel="noopener" target="_blank">হোম</a>
+<div class="desktop-dropdown">
+<button type="button">আমাদের সম্পর্কে <i class="fa-solid fa-chevron-down"></i></button>
+<div class="desktop-dropdown-menu">
+<a href="https://land.gov.bd/about-pd" rel="noopener" target="_blank">প্রকল্প পরিচালক</a>
+<a href="https://land.gov.bd/uddasho-lokkho" rel="noopener" target="_blank">উদ্দেশ্য ও লক্ষ্য</a>
+<a href="https://land.gov.bd/nagorik-subidha" rel="noopener" target="_blank">নাগরিকের সুবিধা</a>
+<a href="https://land.gov.bd/proklpo-output" rel="noopener" target="_blank">প্রকল্পের আউটপুট</a>
+<a href="https://land.gov.bd/project-summary" rel="noopener" target="_blank">প্রকল্প সারসংক্ষেপ</a>
+</div>
+</div>
+<div class="desktop-dropdown">
+<button type="button">তথ্য <i class="fa-solid fa-chevron-down"></i></button>
+<div class="desktop-dropdown-menu small">
+<a href="https://land.gov.bd/ainobidhi" rel="noopener" target="_blank">আইন ও বিধি</a>
+<a href="https://dlrms.land.gov.bd/faq" rel="noopener" target="_blank">জিজ্ঞাসা</a>
+</div>
+</div>
+<a href="https://dlrms.land.gov.bd/poripotro" rel="noopener" target="_blank">পরিপত্র</a>
+<a href="https://dlrms.land.gov.bd/application/track" rel="noopener" target="_blank">আবেদনের অবস্থা</a>
+<a href="https://dlrms.land.gov.bd/guideline" rel="noopener" target="_blank">নির্দেশিকা</a>
+<a href="https://dlrms.land.gov.bd" rel="noopener" target="_blank">খতিয়ান ও ম্যাপ অনুসন্ধান</a>
+</nav>
+<div class="right-icons">
+<a aria-label="কার্ট লিংক" class="cart-btn" href="#" rel="noopener" target="_blank">
+<svg class="cart-svg" viewbox="0 0 24 24">
+<path d="M 15.55 13 c 0.75 0 1.41 -0.41 1.75 -1.03 l 3.58 -6.49 c 0.37 -0.66 -0.11 -1.48 -0.87 -1.48 H 5.21 l -0.94 -2 H 1 v 2 h 2 l 3.6 7.59 l -1.35 2.44 C 4.52 15.37 5.48 17 7 17 h 12 v -2 H 7 l 1.1 -2 h 7.45 Z M 6.16 6 h 12.15 l -2.76 5 H 8.53 L 6.16 6 Z M 7 18 c -1.1 0 -1.99 0.9 -1.99 2 S 5.9 22 7 22 s 2 -0.9 2 -2 s -0.9 -2 -2 -2 Z m 10 0 c -1.1 0 -1.99 0.9 -1.99 2 s 0.89 2 1.99 2 s 2 -0.9 2 -2 s -0.9 -2 -2 -2 Z"></path>
+</svg>
+</a>
+<div class="desktop-login-wrap">
+<button class="desktop-login-btn" type="button">লগইন <i class="fa-solid fa-chevron-down"></i></button>
+<div class="desktop-login-menu">
+<a href="https://lsg-land-owner.land.gov.bd/login" rel="noopener" target="_blank">নাগরিক/সংস্থা</a>
+<a href="https://office-idp.land.gov.bd/auth/realms/lsg/protocol/openid-connect/auth?client_id=lsg-ug047lo76xlyytm109sk53m8r0islqou-live-20241118&amp;redirect_uri=https%3A%2F%2Fdashboard.land.gov.bd%2F&amp;state=1a3e8c80-ce32-4e5f-900a-cd4dd57d9f1a&amp;response_mode=fragment&amp;response_type=code&amp;scope=openid&amp;nonce=7eec2538-f01a-4809-ad08-332883726258&amp;code_challenge=uTCW95bD0opgCZFe-R4j4lZqr48wLrSOe1ac0S46l24&amp;code_challenge_method=S256" rel="noopener" target="_blank">প্রশাসনিক</a>
+<a href="https://lsg-land-owner.land.gov.bd/register" rel="noopener" target="_blank">রেজিস্ট্রেশন</a>
+</div>
+</div>
+<a aria-label="মেনু লিংক" class="dots-icon" href="#" rel="noopener">
+<i class="fa-solid fa-ellipsis-vertical"></i>
+</a>
+<div class="menu-overlay" id="menuOverlay"></div>
+<nav class="side-menu" id="sideMenu">
+<!-- Menu links: replace only the href values with your real page links later -->
+<a href="https://land.gov.bd/" rel="noopener" target="_blank">হোম</a>
+<button class="menu-toggle" type="button">
+          আমাদের সম্পর্কে <i class="fa-solid fa-chevron-down"></i>
+</button>
+<div class="submenu">
+<a href="https://land.gov.bd/about-pd" rel="noopener" target="_blank">প্রকল্প পরিচালক</a>
+<a href="https://land.gov.bd/uddasho-lokkho" rel="noopener" target="_blank">উদ্দেশ্য ও লক্ষ্য</a>
+<a href="https://land.gov.bd/nagorik-subidha" rel="noopener" target="_blank">নাগরিকের সুবিধা</a>
+<a href="https://land.gov.bd/proklpo-output" rel="noopener" target="_blank">প্রকল্পের আউটপুট</a>
+<a href="https://land.gov.bd/project-summary" rel="noopener" target="_blank">প্রকল্প সারসংক্ষেপ</a>
+</div>
+<button class="menu-toggle" type="button">
+          তথ্য <i class="fa-solid fa-chevron-down"></i>
+</button>
+<div class="submenu">
+<a href="https://land.gov.bd/ainobidhi" rel="noopener" target="_blank">আইন ও বিধি</a>
+<a href="https://dlrms.land.gov.bd/faq" rel="noopener" target="_blank">জিজ্ঞাসা</a>
+</div>
+<a href="https://dlrms.land.gov.bd/poripotro" rel="noopener" target="_blank">পরিপত্র</a>
+<a href="https://dlrms.land.gov.bd/application/track" rel="noopener" target="_blank">আবেদনের অবস্থা</a>
+<a href="https://dlrms.land.gov.bd/guideline" rel="noopener" target="_blank">নির্দেশিকা</a>
+<a href="https://dlrms.land.gov.bd" rel="noopener" target="_blank">খতিয়ান ও ম্যাপ অনুসন্ধান</a>
+<button class="menu-toggle login-toggle" type="button">
+<span><i class="fa-solid fa-right-to-bracket"></i> লগইন</span>
+<i class="fa-solid fa-chevron-down"></i>
+</button>
+<div class="login-box">
+<a href="https://lsg-land-owner.land.gov.bd/login" rel="noopener" target="_blank">নাগরিক/সংস্থা</a>
+<a href="https://office-idp.land.gov.bd/auth/realms/lsg/protocol/openid-connect/auth?client_id=lsg-ug047lo76xlyytm109sk53m8r0islqou-live-20241118&amp;redirect_uri=https%3A%2F%2Fdashboard.land.gov.bd%2F&amp;state=1a3e8c80-ce32-4e5f-900a-cd4dd57d9f1a&amp;response_mode=fragment&amp;response_type=code&amp;scope=openid&amp;nonce=7eec2538-f01a-4809-ad08-332883726258&amp;code_challenge=uTCW95bD0opgCZFe-R4j4lZqr48wLrSOe1ac0S46l24&amp;code_challenge_method=S256" rel="noopener" target="_blank">প্রশাসনিক</a>
+<a href="https://lsg-land-owner.land.gov.bd/register" rel="noopener" target="_blank">রেজিস্ট্রেশন</a>
+</div>
+</nav>
+</div>
+</header>
+<!-- =========================================================
+       MAIN KHATIAN INFORMATION SECTION
+       - Main white card with khatian details
+  ========================================================== -->
+<main class="content">
+<div class="details-loader" id="detailsLoader">
+<div class="details-spinner"></div>
+<div>তথ্য লোড হচ্ছে...</div>
+</div>
+<div class="card" id="detailsCard" style="display:none;">
+<h1 class="card-title" id="khatianTitle">খতিয়ান নং - </h1>
+<div class="info-row">
+<span class="label">মালিক</span><span class="colon">:</span><span class="value" id="ownerName"></span>
+</div>
+<div class="info-row">
+<span class="label">দাগ নং</span><span class="colon">:</span><span class="value" id="dagNo"></span>
+</div>
+<div class="info-row">
+<span class="label">সার্ভে</span><span class="colon">:</span><span class="value" id="survey"></span>
+</div>
+<div class="info-row">
+<span class="label">মৌজা</span><span class="colon">:</span><span class="value" id="mouza"></span>
+</div>
+<div class="info-row">
+<span class="label">উপজেলা</span><span class="colon">:</span><span class="value" id="upazila"></span>
+</div>
+<div class="info-row">
+<span class="label">জেলা</span><span class="colon">:</span><span class="value" id="district"></span>
+</div>
+<div class="info-row">
+<span class="label">বিভাগ</span><span class="colon">:</span><span class="value" id="division"></span>
+</div>
+<div class="info-row">
+<span class="label">তারিখ</span><span class="colon">:</span><span class="value" id="recordDate"></span>
+</div>
+</div>
+</main>
+<div class="green-divider"></div>
+<!-- =========================================================
+       FOOTER SECTION
+       - Important links
+       - Implementation logo
+       - Social media links
+       - Google Play and technical support logo
+  ========================================================== -->
+<footer class="footer">
+<div class="footer-links-title">গুরুত্বপূর্ণ লিঙ্ক</div>
+<div class="links-grid">
+<a aria-label="বাংলাদেশ জাতীয় তথ্য বাতায়ন" class="link-item" href="https://bangladesh.gov.bd/index.php" rel="noopener" target="_blank"><span class="link-arrow"></span> বাংলাদেশ জাতীয় তথ্য বাতায়ন</a>
+<a aria-label="সাপোর্ট টিকেট" class="link-item" href="https://support.dlrms.land.gov.bd/" rel="noopener" target="_blank"><span class="link-arrow"></span> সাপোর্ট টিকেট</a>
+<a aria-label="ভূমি মন্ত্রণালয়" class="link-item" href="https://minland.gov.bd/" rel="noopener" target="_blank"><span class="link-arrow"></span> ভূমি মন্ত্রণালয়</a>
+<a aria-label="গোপনীয়তা নীতি" class="link-item" href="https://land.gov.bd/nitimala" rel="noopener" target="_blank"><span class="link-arrow"></span> গোপনীয়তা নীতি</a>
+<a aria-label="তথ্য অধিদফতর (পিআইডি)" class="link-item" href="https://pressinform.gov.bd/" rel="noopener" target="_blank"><span class="link-arrow"></span> তথ্য অধিদফতর (পিআইডি)</a>
+<a aria-label="সাধারণ জিজ্ঞাসা" class="link-item" href="https://dlrms.land.gov.bd/faq" rel="noopener" target="_blank"><span class="link-arrow"></span> সাধারণ জিজ্ঞাসা</a>
+<a aria-label="অভিযোগ প্রতিকার ব্যবস্থা" class="link-item" href="https://www.grs.gov.bd/" rel="noopener" target="_blank"><span class="link-arrow"></span> অভিযোগ প্রতিকার ব্যবস্থা</a>
+<a aria-label="যোগাযোগ" class="link-item" href="https://dlrms.land.gov.bd/contact" rel="noopener" target="_blank"><span class="link-arrow"></span> যোগাযোগ</a>
+</div>
+<div class="footer-bottom-grid">
+<div>
+<div class="footer-section-title">পরিকল্পনা ও বাস্তবায়ন</div>
+<div class="org-logos">
+<a aria-label="জনবান্ধব ভূমিসেবা অটোমেশন লিংক" class="image-link" href="https://lmap.minland.gov.bd/" rel="noopener" target="_blank">
+<img alt="জনবান্ধব ভূমিসেবা অটোমেশন" class="bhumiseba-img" src="assets/images/lmap_logo (1).png"/>
+</a>
+</div>
+</div>
+<div>
+<div class="footer-section-title">সামাজিক যোগাযোগ</div>
+<div class="social-icons">
+<a aria-label="Facebook" class="social-btn fb" href="https://www.facebook.com/MinlandGovBd" rel="noopener" target="_blank"><i class="fa-brands fa-facebook-f"></i></a>
+<a aria-label="X Twitter" class="social-btn tw" href="https://x.com/MinlandGovBd" rel="noopener" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+<a aria-label="Instagram" class="social-btn ig" href="https://www.instagram.com/minlandgovbd" rel="noopener" target="_blank"><i class="fa-brands fa-instagram"></i></a>
+</div>
+<div class="social-icons">
+<a aria-label="YouTube" class="social-btn yt" href="https://www.youtube.com/@minland-gov-bd/videos" rel="noopener" target="_blank"><i class="fa-brands fa-youtube"></i></a>
+</div>
+</div>
+</div>
+<div class="bottom-two-col">
+<div>
+<a aria-label="Google Play লিংক" class="image-link" href="https://play.google.com/store/apps/details?id=com.softbdltd.eKhatian&amp;pcampaignid=web_share" rel="noopener" target="_blank">
+<img alt="Google Play তে পান" class="play-store-img" src="assets/images/g-play.png"/>
+</a>
+</div>
+<div class="tech-section">
+<div class="footer-section-title">কারিগরি সহায়তায়</div>
+<a aria-label="SoftBD লিংক" class="image-link" href="https://softbdltd.com/" rel="noopener" target="_blank">
+<img alt="SoftBD Ltd" class="softbd-img" src="assets/images/softbd.png"/>
+</a>
+</div>
+</div>
+<div class="copyright">
+   <p>©২০২৬ ভূমি ব্যবস্থাপনা অটোমেশন প্রকল্প</p>
+</div>
+</footer>
+<!-- =========================================================
+       CART DRAWER
+       - Opens when cart icon is clicked
+       - Shows cart tabs and checkout button
+  ========================================================== -->
+<div class="cart-overlay" id="cartOverlay"></div>
+<aside class="cart-drawer" id="cartDrawer">
+<div class="cart-header">
+<button class="cart-back" id="cartClose" type="button">
+<i class="fa-solid fa-arrow-left"></i>
+</button>
+<h2>আপনার ঝুড়ি</h2>
+</div>
+<div class="cart-tabs">
+<button class="cart-tab active" data-tab="khatian">
+<span class="radio-circle"></span> খতিয়ান
+      </button>
+<button class="cart-tab" data-tab="map">
+<span class="radio-circle"></span> মৌজা ম্যাপ
+      </button>
+</div>
+<div class="application-type" id="applicationType">
+<h3>আবেদনের ধরন:</h3>
+<div class="cart-tabs type-tabs">
+<button class="cart-tab">
+<span class="radio-circle"></span> অনলাইন কপি
+        </button>
+<button class="cart-tab active">
+<span class="radio-circle"></span> সার্টিফাইড কপি
+        </button>
+</div>
+</div>
+<div class="cart-empty">ঝুড়িতে কোনো আইটেম নেই</div>
+<a class="drawer-chat" href="#">
+<i class="fa-regular fa-message"></i>
+</a>
+<button class="checkout-btn" disabled="">চেকআউট করুন</button>
+</aside>
+<!-- CHATBOT POPUP -->
+<div class="chatbot-box" id="chatbotBox">
+<div class="chatbot-header">Conversation with Chatbot</div>
+<div class="chatbot-body" id="chatbotBody">
+<div class="bot-row">
+<div class="bot-avatar"><i class="fa-solid fa-robot"></i></div>
+<div class="bot-message">
+        স্বাগতম! আমি আপনার সহায়ক চ্যাটবট। কিভাবে আমি আপনার সহায়তা করতে পারি?
+      </div>
+</div>
+<div class="bot-message bot-option-title">যেকোনো একটি নির্বাচন করুন</div>
+<button class="chat-option" data-reply="ডিএলআরএমএস হোমপেজ থেকে আপনার লোকেশন অনুযায়ী ড্রপডাউন থেকে বিভাগ, জেলা, উপজেলা সহ অন্যান্য ফিল্ড পূরণ করে খতিয়ান অনুসন্ধান করুন। যদি অনুসন্ধান করে খতিয়ান পাওয়া যায় তাহলে খতিয়ানটি ডাবল ক্লিক করে ঝুড়িতে রাখুন। অনুসন্ধান করে খতিয়ান না পাওয়া গেলে সার্টিফাইড কপি পাওয়ার জন্য ঝুড়িতে রাখুন। সর্বশেষ প্রয়োজনীয় তথ্য দিয়ে অর্ডার চেক আউট করুন।">
+      কিভাবে অর্ডার করবো?
+    </button>
+<button class="chat-option" data-reply="আপনার আবেদন নম্বর দিন">
+      অর্ডার স্ট্যাটাস দেখতে চাই?
+    </button>
+<button class="chat-option" data-contact="true">
+      কাস্টমার সাপোর্ট এর সাথে কথা বলতে চাই?
+    </button>
+</div>
+<form class="chatbot-input" id="chatbotForm">
+<input autocomplete="off" id="chatbotInput" placeholder="Write your message here" type="text"/>
+<button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+</form>
+</div>
+<a aria-label="চ্যাট লিংক" class="chat-fab" href="#" rel="noopener" target="_blank">
+<svg aria-hidden="true" class="chat-svg" viewbox="0 0 24 24">
+<path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2ZM20 16H5.17L4 17.17V4H20V16Z"></path>
+<path d="M7 9H17V11H7Z"></path>
+<path d="M7 13H14V15H7Z"></path>
+</svg>
+</a>
+<script src="assets/js/date.js"></script>
+<script src="assets/js/common-ui.js"></script>
+<script src="assets/js/chatbot.js"></script>
+<script type="module" src="assets/js/details.js"></script>
+</body>
+</html>

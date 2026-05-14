@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Admin Panel - QR Information System</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin href="https://fonts.gstatic.com" rel="preconnect" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link href="assets/css/admin.css" rel="stylesheet" />
+</head>
+<body>
+  <div id="loginScreen" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <div class="login-icon"><i class="fa-solid fa-shield-halved"></i></div>
+      <h1>Admin Login</h1>
+      <p>Firebase Database-এ থাকা password মিললেই Admin Panel খুলবে।</p>
+      <div class="login-field">
+        <label for="adminPassword">Admin Password</label>
+        <div class="password-box">
+          <input id="adminPassword" type="password" placeholder="Password লিখুন" autocomplete="current-password" required />
+          <button id="togglePassword" type="button" aria-label="Show password"><i class="fa-regular fa-eye"></i></button>
+        </div>
+      </div>
+      <button class="login-btn" type="submit"><i class="fa-solid fa-lock-open"></i> Login</button>
+      <div id="loginStatus" class="login-status"></div>
+      <div class="login-note">Default password path: <b>admin_settings/password</b></div>
+    </form>
+  </div>
+
+  <div id="adminApp" class="admin-app is-locked">
+    <div class="topbar">QR Based Information System - Admin Panel</div>
+    <header class="admin-header">
+      <div class="brand"><img alt="Logo" src="assets/images/logo.png" /><span>খতিয়ান তথ্য Admin Panel</span></div>
+      <button class="logout-btn" id="logoutBtn" type="button"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+    </header>
+
+    <main class="wrap">
+      <section class="panel form-panel">
+        <div class="panel-title">
+          <h2><i class="fa-solid fa-database"></i> তথ্য Add / Edit</h2>
+          <span>Secure Admin Area</span>
+        </div>
+        <form id="recordForm">
+          <input id="recordId" type="hidden" />
+          <div class="form-grid">
+            <div class="form-group"><label>খতিয়ান নং</label><input id="khatianNo" required /></div>
+            <div class="form-group"><label>দাগ নং</label><input id="dagNo" required /></div>
+            <div class="form-group full"><label>মালিক</label><textarea id="ownerName" required></textarea></div>
+            <div class="form-group"><label>সার্ভে</label><input id="survey" placeholder="আর এস" required /></div>
+            <div class="form-group"><label>মৌজা</label><input id="mouza" required /></div>
+            <div class="form-group"><label>উপজেলা</label><input id="upazila" required /></div>
+            <div class="form-group"><label>জেলা</label><input id="district" required /></div>
+            <div class="form-group"><label>বিভাগ</label><input id="division" required /></div>
+            <div class="form-group"><label>তারিখ</label><input id="recordDate" placeholder="৫ ডিসেম্বর ২০২৫" required /></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Data</button>
+            <button class="btn btn-light" id="resetBtn" type="button">Clear</button>
+          </div>
+          <div class="status" id="statusText"></div>
+        </form>
+      </section>
+
+      <section class="panel records-panel">
+        <div class="panel-title">
+          <h2><i class="fa-solid fa-list"></i> Saved Records</h2>
+          <span id="recordCount">0 Records</span>
+        </div>
+        <div class="management-tools">
+          <div class="search-box">
+            <input id="searchInput" placeholder="খতিয়ান / মালিক / দাগ / জেলা দিয়ে সার্চ করুন" />
+            <button class="btn btn-light" id="refreshBtn" type="button">Refresh</button>
+          </div>
+
+          <div class="qr-box" id="qrBox" aria-live="polite">
+            <div class="qr-head">
+              <div>
+                <h3><i class="fa-solid fa-qrcode"></i> QR Code Preview</h3>
+                <p id="qrRecordTitle">Save অথবা QR বাটনে ক্লিক করলে এখানে QR Code দেখা যাবে।</p>
+              </div>
+            </div>
+            <div class="qr-preview-frame">
+              <div id="qrcode"></div>
+            </div>
+            <div class="qr-link" id="generatedLink"></div>
+            <div class="qr-actions">
+              <button class="btn btn-primary" id="downloadQrBtn" type="button"><i class="fa-solid fa-download"></i> QR Download</button>
+              <button class="btn btn-light" id="copyLinkBtn" type="button"><i class="fa-regular fa-copy"></i> Link Copy</button>
+            </div>
+            <div class="small-note">এই link দিয়ে QR code তৈরি হবে। QR scan করলে details page থেকে Firebase data load হবে।</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="records">
+            <thead><tr><th>খতিয়ান</th><th>মালিক</th><th>দাগ</th><th>লোকেশন</th><th>Action</th></tr></thead>
+            <tbody id="recordsBody"><tr><td colspan="5">Login করার পর data load হবে...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>
