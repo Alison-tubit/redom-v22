@@ -3,6 +3,7 @@
    - Password login from Firebase path: admin_settings/password
    - Add, edit, delete and search khatian records
    - Generate QR link for each saved record
+   - QR download saves as JPG format
    - This file uses Firebase compat SDK so admin login also works
      when the project is opened directly or hosted online.
 ========================================================= */
@@ -58,7 +59,7 @@ async function checkPassword(inputPassword) {
   const savedPassword = snapshot.val();
 
   if (savedPassword === null || savedPassword === undefined || savedPassword === "") {
-    throw new Error("Firebase path admin_settings/password খালি আছে বা পাওয়া যায়নি।");
+    throw new Error("Firebase path admin_settings/password খালি আছে বা পাওয়া যায়নি।");
   }
 
   return String(inputPassword).trim() === String(savedPassword).trim();
@@ -91,7 +92,14 @@ $("loginForm").addEventListener("submit", async (event) => {
 
 $("togglePassword").addEventListener("click", () => {
   const input = $("adminPassword");
-  input.type = input.type === "password" ? "text" : "password";
+  const icon = $("togglePassword").querySelector("i");
+  if (input.type === "password") {
+    input.type = "text";
+    icon.className = "fa-regular fa-eye-slash";
+  } else {
+    input.type = "password";
+    icon.className = "fa-regular fa-eye";
+  }
 });
 
 $("logoutBtn").addEventListener("click", lockAdmin);
@@ -170,12 +178,12 @@ function showQR(id) {
 
   new QRCode(qrContainer, {
     text: link,
-    width: 180,
-    height: 180,
+    width: 168,
+    height: 168,
     correctLevel: QRCode.CorrectLevel.H
   });
 
-  // qrcodejs sometimes creates both canvas and img. Keep only one visible/usable QR.
+  // qrcodejs sometimes creates both canvas and img. Keep only canvas.
   const qrImage = qrContainer.querySelector("img");
   if (qrImage) qrImage.remove();
   const qrCanvas = qrContainer.querySelector("canvas");
@@ -234,9 +242,9 @@ function renderRecords() {
       <td>${safeText(data.dagNo || "-")}</td>
       <td>${safeText(data.mouza || "-")}, ${safeText(data.upazila || "-")}, ${safeText(data.district || "-")}</td>
       <td>
-        <button class="action-btn edit" data-edit="${id}">Edit</button>
-        <button class="action-btn qr" data-qr="${id}">QR</button>
-        <button class="action-btn delete" data-del="${id}">Delete</button>
+        <button class="action-btn edit" data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+        <button class="action-btn qr" data-qr="${id}"><i class="fa-solid fa-qrcode"></i> QR</button>
+        <button class="action-btn delete" data-del="${id}"><i class="fa-solid fa-trash"></i> Delete</button>
       </td>
     </tr>
   `).join("");
@@ -276,6 +284,7 @@ $("resetBtn").addEventListener("click", () => {
   clearForm();
   resetQRPreview();
 });
+
 function resetAdminView() {
   clearForm();
   $("searchInput").value = "";
@@ -285,6 +294,7 @@ function resetAdminView() {
 }
 
 $("refreshBtn").addEventListener("click", resetAdminView);
+
 $("copyLinkBtn").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText($("generatedLink").textContent);
@@ -298,7 +308,7 @@ if (sessionStorage.getItem(SESSION_KEY) === "yes") {
   unlockAdmin();
 }
 
-
+/* ── QR Download as JPG ───────────────────────────── */
 function downloadCurrentQR() {
   const qrCanvas = $("qrcode").querySelector("canvas");
   const linkText = $("generatedLink").textContent.trim();
@@ -308,15 +318,32 @@ function downloadCurrentQR() {
     return;
   }
 
+  // Create a new canvas with white background for JPG (no transparency)
+  const exportCanvas = document.createElement("canvas");
+  const size = 200;
+  exportCanvas.width = size;
+  exportCanvas.height = size;
+  const ctx = exportCanvas.getContext("2d");
+
+  // Fill white background (required for JPG — no alpha channel)
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, size, size);
+
+  // Draw the QR code canvas onto the white background
+  ctx.drawImage(qrCanvas, 0, 0, size, size);
+
   const record = allRecords[activeQrId] || {};
   const cleanName = String(record.khatianNo || activeQrId || Date.now()).replace(/[^a-zA-Z0-9ঀ-৿_-]/g, "-");
+
   const downloadLink = document.createElement("a");
-  downloadLink.download = `qr-code-${cleanName}.png`;
-  downloadLink.href = qrCanvas.toDataURL("image/png");
+  downloadLink.download = `qr-code-${cleanName}.jpg`;
+  // quality 0.95 gives excellent JPG output
+  downloadLink.href = exportCanvas.toDataURL("image/jpeg", 0.95);
   document.body.appendChild(downloadLink);
   downloadLink.click();
   document.body.removeChild(downloadLink);
-  $("statusText").textContent = "একটি QR Code download হয়েছে";
+
+  $("statusText").textContent = "QR Code JPG ফরম্যাটে download হয়েছে";
 }
 
 $("downloadQrBtn").addEventListener("click", downloadCurrentQR);
