@@ -386,8 +386,8 @@ body {
 }
 .qr-preview-frame #qrcode canvas {
   display: block !important;
-  width: 60px !important;
-  height: 60px !important;
+  width: 168px !important;
+  height: 168px !important;
 }
 .qr-preview-frame #qrcode img { display: none !important; }
 
