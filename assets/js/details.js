@@ -29,7 +29,7 @@ async function loadDetails() {
   if (!loader || !card) return;
 
   if (!id) {
-    showError("কোনো তথ্য ID পাওয়া যায়নি। QR Code অথবা লিংকটি সঠিক নয়।");
+    showError("কোনো খতিয়ান পাওয়া যায়নি");
     return;
   }
 
@@ -37,7 +37,7 @@ async function loadDetails() {
     const snapshot = await get(ref(db, `khatian_records/${id}`));
 
     if (!snapshot.exists()) {
-      showError("এই ID অনুযায়ী কোনো তথ্য পাওয়া যায়নি।");
+      showError("কোনো খতিয়ান পাওয়া যায়নি");
       return;
     }
 
