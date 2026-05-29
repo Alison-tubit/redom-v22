@@ -1133,7 +1133,7 @@
       }
 
       .card {
-        border-radius: 10px;
+        border-radius: 5px;
         padding: 28px 22px 20px;
       }
 
@@ -1409,12 +1409,12 @@
 
       .card {
         border-radius: 5px;
-    width: 400px;
-    padding: 20px;
-    -webkit-box-align: center;
-    align-items: center;
-    -webkit-box-pack: center;
-    justify-content: center;
+        width: 400px;
+        padding: 20px;
+       -webkit-box-align: center;
+        align-items: center;
+       -webkit-box-pack: center;
+        justify-content: center;
       }
 
       .card-title {
@@ -1429,7 +1429,7 @@
       }
 
       .label {
-        min-width: 110px;
+        min-width: 10px;
       }
 
       .footer {
