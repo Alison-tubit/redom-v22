@@ -42,84 +42,158 @@
   <!-- ════════════ ADMIN APP ════════════ -->
   <div id="adminApp" class="admin-app is-locked">
 
+    <!-- Topbar -->
     <div class="topbar">
       <i class="fa-solid fa-leaf" style="margin-right:6px;opacity:.75"></i>
       QR Based Information System — Admin Panel
       <i class="fa-solid fa-leaf" style="margin-left:6px;opacity:.75"></i>
     </div>
 
+    <!-- Header -->
     <header class="admin-header">
       <div class="brand">
         <img alt="Logo" src="assets/images/logo.png" />
         <span>খতিয়ান তথ্য Admin Panel</span>
       </div>
-      <button class="logout-btn" id="logoutBtn" type="button">
-        <i class="fa-solid fa-right-from-bracket"></i> Logout
-      </button>
+      <div class="header-actions">
+        <!-- Notification Bell -->
+        <div class="notif-wrapper" id="notifWrapper">
+          <button class="notif-btn" id="notifBtn" type="button" aria-label="Notifications">
+            <i class="fa-solid fa-bell"></i>
+            <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+          </button>
+          <div class="notif-panel" id="notifPanel">
+            <div class="notif-panel-head">
+              <span><i class="fa-solid fa-bell"></i> Notifications</span>
+              <button id="clearNotifBtn" type="button">সব পড়া হয়েছে</button>
+            </div>
+            <ul class="notif-list" id="notifList">
+              <li class="notif-empty">কোনো নতুন notification নেই।</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- তথ্য ইনপুট বাটন -->
+        <button class="input-toggle-btn" id="inputToggleBtn" type="button">
+          <i class="fa-solid fa-plus"></i>
+          <span>তথ্য ইনপুট</span>
+        </button>
+
+        <button class="logout-btn" id="logoutBtn" type="button">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Logout</span>
+        </button>
+      </div>
     </header>
 
     <main class="wrap">
 
-      <!-- ── Form Panel ── -->
-      <section class="panel form-panel">
-        <div class="panel-title">
-          <h2><i class="fa-solid fa-database"></i> তথ্য Add / Edit</h2>
-          <span>Secure Admin Area</span>
+      <!-- ── Dashboard Summary Cards ── -->
+      <section class="dashboard-section">
+        <div class="dashboard-cards" id="dashboardCards">
+          <div class="dash-card dash-total">
+            <div class="dash-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div class="dash-info">
+              <span class="dash-label">মোট পর্চা</span>
+              <span class="dash-value" id="statTotal">0</span>
+            </div>
+          </div>
+          <div class="dash-card dash-today">
+            <div class="dash-icon"><i class="fa-solid fa-calendar-day"></i></div>
+            <div class="dash-info">
+              <span class="dash-label">আজকের পর্চা</span>
+              <span class="dash-value" id="statToday">0</span>
+            </div>
+          </div>
+          <div class="dash-card dash-ready">
+            <div class="dash-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="dash-info">
+              <span class="dash-label">প্রস্তুত (৩+ দিন)</span>
+              <span class="dash-value" id="statReady">0</span>
+            </div>
+          </div>
+          <div class="dash-card dash-pending">
+            <div class="dash-icon"><i class="fa-solid fa-clock"></i></div>
+            <div class="dash-info">
+              <span class="dash-label">Pending (৩ দিনের কম)</span>
+              <span class="dash-value" id="statPending">0</span>
+            </div>
+          </div>
         </div>
-
-        <form id="recordForm" autocomplete="off">
-          <input id="recordId" type="hidden" />
-          <div class="form-grid">
-            <div class="form-group">
-              <label>খতিয়ান নং</label>
-              <input id="khatianNo" placeholder="যেমন: ১২৩৪" required />
-            </div>
-            <div class="form-group">
-              <label>দাগ নং</label>
-              <input id="dagNo" placeholder="যেমন: ৫৬৭" required />
-            </div>
-            <div class="form-group full">
-              <label>মালিকের নাম</label>
-              <textarea id="ownerName" placeholder="সম্পূর্ণ নাম লিখুন" required></textarea>
-            </div>
-            <div class="form-group">
-              <label>সার্ভে</label>
-              <input id="survey" placeholder="আর এস" required />
-            </div>
-            <div class="form-group">
-              <label>মৌজা</label>
-              <input id="mouza" placeholder="মৌজার নাম" required />
-            </div>
-            <div class="form-group">
-              <label>উপজেলা</label>
-              <input id="upazila" placeholder="উপজেলার নাম" required />
-            </div>
-            <div class="form-group">
-              <label>জেলা</label>
-              <input id="district" placeholder="জেলার নাম" required />
-            </div>
-            <div class="form-group">
-              <label>বিভাগ</label>
-              <input id="division" placeholder="বিভাগের নাম" required />
-            </div>
-            <div class="form-group full">
-              <label>তারিখ</label>
-              <input id="recordDate" placeholder="যেমন: ৫ ডিসেম্বর ২০২৫" required />
-            </div>
-          </div>
-
-          <div class="btn-row">
-            <button class="btn btn-primary" type="submit">
-              <i class="fa-solid fa-floppy-disk"></i> Save Data
-            </button>
-            <button class="btn btn-light" id="resetBtn" type="button">
-              <i class="fa-solid fa-rotate-left"></i> Clear
-            </button>
-          </div>
-
-          <div class="status" id="statusText"></div>
-        </form>
       </section>
+
+      <!-- ── Input Form Modal Overlay ── -->
+      <div class="form-overlay" id="formOverlay" aria-hidden="true">
+        <div class="form-modal" id="formModal" role="dialog" aria-modal="true" aria-labelledby="formModalTitle">
+          <div class="form-modal-head">
+            <h2 id="formModalTitle">
+              <i class="fa-solid fa-database"></i>
+              <span id="formModalTitleText">নতুন তথ্য যোগ করুন</span>
+            </h2>
+            <div class="form-modal-head-right">
+              <span id="formBadge">নতুন তথ্য</span>
+              <button class="modal-close-btn" id="modalCloseBtn" type="button" aria-label="বন্ধ করুন">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-modal-body">
+            <form id="recordForm" autocomplete="off">
+              <input id="recordId" type="hidden" />
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>খতিয়ান নং</label>
+                  <input id="khatianNo" placeholder="যেমন: ১২৩৪" required />
+                </div>
+                <div class="form-group">
+                  <label>দাগ নং</label>
+                  <input id="dagNo" placeholder="যেমন: ৫৬৭" required />
+                </div>
+                <div class="form-group full">
+                  <label>মালিকের নাম</label>
+                  <textarea id="ownerName" placeholder="সম্পূর্ণ নাম লিখুন" required></textarea>
+                </div>
+                <div class="form-group">
+                  <label>সার্ভে</label>
+                  <input id="survey" placeholder="আর এস" required />
+                </div>
+                <div class="form-group">
+                  <label>মৌজা</label>
+                  <input id="mouza" placeholder="মৌজার নাম" required />
+                </div>
+                <div class="form-group">
+                  <label>উপজেলা</label>
+                  <input id="upazila" placeholder="উপজেলার নাম" required />
+                </div>
+                <div class="form-group">
+                  <label>জেলা</label>
+                  <input id="district" placeholder="জেলার নাম" required />
+                </div>
+                <div class="form-group">
+                  <label>বিভাগ</label>
+                  <input id="division" placeholder="বিভাগের নাম" required />
+                </div>
+                <div class="form-group full">
+                  <label>তারিখ</label>
+                  <input id="recordDate" placeholder="যেমন: ৫ ডিসেম্বর ২০২৫" required />
+                </div>
+              </div>
+
+              <div class="btn-row">
+                <button class="btn btn-primary" type="submit">
+                  <i class="fa-solid fa-floppy-disk"></i> Save করুন
+                </button>
+                <button class="btn btn-light" id="resetBtn" type="button">
+                  <i class="fa-solid fa-rotate-left"></i> Clear
+                </button>
+              </div>
+
+              <div class="status" id="statusText"></div>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <!-- ── Records Panel ── -->
       <section class="panel records-panel">
@@ -129,35 +203,24 @@
         </div>
 
         <div class="management-tools">
-          <div class="search-box">
-            <input id="searchInput" placeholder="খতিয়ান / মালিক / দাগ / জেলা দিয়ে সার্চ করুন" />
+          <div class="search-row">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass search-icon"></i>
+              <input id="searchInput" placeholder="খতিয়ান / মালিক / দাগ / জেলা দিয়ে সার্চ করুন" />
+            </div>
             <button class="btn btn-light" id="refreshBtn" type="button">
               <i class="fa-solid fa-arrows-rotate"></i> Refresh
             </button>
           </div>
 
-          <!-- QR Preview Card -->
-          <div class="qr-box" id="qrBox" aria-live="polite">
-            <div class="qr-head">
-              <h3><i class="fa-solid fa-qrcode"></i> QR Code Preview</h3>
-              <p id="qrRecordTitle">Save অথবা QR বাটনে ক্লিক করলে এখানে QR Code দেখা যাবে।</p>
-            </div>
-            <div class="qr-preview-frame">
-              <div id="qrcode"></div>
-            </div>
-            <div class="qr-link" id="generatedLink"></div>
-            <div class="qr-actions">
-              <button class="btn btn-primary" id="downloadQrBtn" type="button">
-                <i class="fa-solid fa-download"></i> Download
-              </button>
-              <button class="btn btn-light" id="copyLinkBtn" type="button">
-                <i class="fa-regular fa-copy"></i> Copy Link
-              </button>
-            </div>
-            <div class="small-note">এই link দিয়ে QR code তৈরি হবে। QR scan করলে Firebase থেকে data load হবে।</div>
+          <!-- QR hint strip -->
+          <div class="qr-box">
+            <i class="fa-solid fa-qrcode"></i>
+            <span>প্রতিটি রেকর্ডের <b>QR</b> বাটনে ক্লিক করলে QR Code প্রিভিউ খুলবে।</span>
           </div>
         </div>
 
+        <!-- Records Table -->
         <div class="table-wrap">
           <table class="records">
             <thead>
@@ -166,22 +229,91 @@
                 <th>মালিকের নাম</th>
                 <th>দাগ নং</th>
                 <th>লোকেশন</th>
+                <th>তারিখ</th>
+                <th>অবস্থা</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody id="recordsBody">
-              <tr><td colspan="5">Login করার পর data load হবে...</td></tr>
+              <tr><td colspan="7">Login করার পর data load হবে...</td></tr>
             </tbody>
           </table>
         </div>
+
+        <!-- Mobile Cards -->
+        <div class="mobile-cards" id="mobileCards"></div>
       </section>
 
     </main>
   </div>
 
+  <!-- ════════════ QR PREVIEW MODAL ════════════ -->
+  <div class="qr-modal-overlay" id="qrModalOverlay" aria-hidden="true">
+    <div class="qr-modal" id="qrModal" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
+
+      <div class="qr-modal-head">
+        <h3 id="qrModalTitle">
+          <i class="fa-solid fa-qrcode"></i>
+          <span id="qrModalTitleText">QR Code</span>
+        </h3>
+        <button class="qr-modal-close" id="qrModalCloseBtn" type="button" aria-label="বন্ধ করুন">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="qr-modal-body">
+        <!-- Canvas Container -->
+        <div class="qr-canvas-wrap" id="qrCanvasWrap">
+          <div id="qrcode"></div>
+        </div>
+
+        <!-- Generated Link -->
+        <div class="qr-modal-link" id="generatedLink"></div>
+
+        <!-- Size Selection -->
+        <div class="qr-size-section">
+          <span class="qr-size-label"><i class="fa-solid fa-expand"></i> Download Size নির্বাচন করুন</span>
+          <div class="qr-size-btns">
+            <button class="qr-size-btn" data-size="small" type="button">
+              Small<span class="size-px">256 × 256</span>
+            </button>
+            <button class="qr-size-btn active" data-size="medium" type="button">
+              Medium<span class="size-px">512 × 512</span>
+            </button>
+            <button class="qr-size-btn" data-size="large" type="button">
+              Large<span class="size-px">1024 × 1024</span>
+            </button>
+            <button class="qr-size-btn" data-size="custom" type="button">
+              Custom<span class="size-px">নিজে দিন</span>
+            </button>
+          </div>
+          <div class="qr-custom-row" id="qrCustomRow">
+            <label for="qrCustomW">প্রস্থ (px):</label>
+            <input id="qrCustomW" type="number" value="800" min="100" max="4000" />
+            <label for="qrCustomH">উচ্চতা (px):</label>
+            <input id="qrCustomH" type="number" value="800" min="100" max="4000" />
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="qr-modal-actions">
+          <button class="btn btn-primary" id="downloadQrBtn" type="button">
+            <i class="fa-solid fa-download"></i> Download QR
+          </button>
+          <button class="btn btn-light" id="copyLinkBtn" type="button">
+            <i class="fa-regular fa-copy"></i> Link Copy
+          </button>
+        </div>
+
+        <div class="small-note">QR scan করলে Firebase থেকে data load হবে।</div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-  <script src="assets/js/admin.js"></script>
+   <script src="assets/js/admin.js"></script>
 </body>
 </html>
