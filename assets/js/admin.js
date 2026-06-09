@@ -1,13 +1,14 @@
 /* =========================================================
-   ADMIN PANEL FIREBASE SYSTEM  v3
+   ADMIN PANEL FIREBASE SYSTEM  v4
    - Modal-based তথ্য ইনপুট ফর্ম (header button থেকে open)
    - Force logout: password change হলে সব ডিভাইস logout
    - তারিখ সহ record table (createdAt + recordDate)
-   - Compact QR (120×120) — প্রিন্ট-ফ্রেন্ডলি
+   - QR Download: Fixed high-res PNG (small/medium/large/custom)
    - Toast notification system
    - Dashboard summary cards
    - Notification bell (3-day alert)
    - Mobile card layout
+   - Performance-optimized, bug-free
 ========================================================= */
 
 const firebaseConfig = {
@@ -26,8 +27,8 @@ if (!firebase.apps.length) {
 }
 
 const db = firebase.database();
-const recordsRef   = db.ref("khatian_records");
-const passwordRef  = db.ref("admin_settings/password");
+const recordsRef      = db.ref("khatian_records");
+const passwordRef     = db.ref("admin_settings/password");
 const sessionTokenRef = db.ref("admin_settings/session_token");
 
 const $ = (id) => document.getElementById(id);
@@ -37,10 +38,11 @@ let recordsListenerStarted = false;
 let activeQrId = null;
 let passwordWatcher = null;
 let currentSessionToken = null;
+let renderDebounceTimer = null;
 
-const SESSION_KEY        = "qr_admin_logged_in";
-const SESSION_TOKEN_KEY  = "qr_admin_session_token";
-const NOTIF_KEY          = "qr_admin_notifs_read";
+const SESSION_KEY       = "qr_admin_logged_in";
+const SESSION_TOKEN_KEY = "qr_admin_session_token";
+const NOTIF_KEY         = "qr_admin_notifs_read";
 
 /* ── Toast System ───────────────────────────────────────── */
 let toastContainer = null;
@@ -62,7 +64,7 @@ function showToast(message, isError = false, duration = 3200) {
 
   setTimeout(() => {
     toast.classList.add("removing");
-    setTimeout(() => toast.remove(), 280);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 280);
   }, duration);
 }
 
@@ -70,6 +72,7 @@ function showToast(message, isError = false, duration = 3200) {
 function getReadNotifs() {
   try { return JSON.parse(sessionStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; }
 }
+
 function markNotifsRead(ids) {
   const existing = getReadNotifs();
   sessionStorage.setItem(NOTIF_KEY, JSON.stringify([...new Set([...existing, ...ids])]));
@@ -111,8 +114,8 @@ function buildNotifications() {
 
   list.innerHTML = notifications.map(({ id, data, age }) => {
     const isUnread = !readIds.includes(id);
-    const khatian  = data.khatianNo ? `খতিয়ান ${data.khatianNo}` : "একটি পর্চা";
-    const owner    = data.ownerName ? ` (${data.ownerName.slice(0, 30)})` : "";
+    const khatian  = data.khatianNo ? `খতিয়ান ${safeText(data.khatianNo)}` : "একটি পর্চা";
+    const owner    = data.ownerName ? ` (${safeText(data.ownerName.slice(0, 30))})` : "";
     return `
       <li class="notif-item${isUnread ? " notif-unread" : ""}" data-notif-id="${id}">
         <div class="notif-item-icon"><i class="fa-solid fa-bell"></i></div>
@@ -135,17 +138,18 @@ document.addEventListener("click", (e) => {
 
 $("clearNotifBtn").addEventListener("click", () => {
   const allIds = Object.keys(allRecords).filter(id => {
-    const age = getAgeDays(allRecords[id].createdAt);
+    const age = getAgeDays(allRecords[id]?.createdAt);
     return age !== null && age >= 3;
   });
   markNotifsRead(allIds);
   buildNotifications();
+  showToast("✓ সব notification পড়া হয়েছে হিসেবে mark করা হয়েছে");
 });
 
 /* ── Dashboard Stats ───────────────────────────────────── */
 function updateDashboard() {
   const records = Object.values(allRecords);
-  const today   = new Date(); today.setHours(0,0,0,0);
+  const today   = new Date(); today.setHours(0, 0, 0, 0);
   let total = records.length, todayCount = 0, ready = 0, pending = 0;
 
   records.forEach(data => {
@@ -153,7 +157,7 @@ function updateDashboard() {
     if (data.createdAt) {
       const d = new Date(data.createdAt);
       if (!isNaN(d)) {
-        const dDay = new Date(d); dDay.setHours(0,0,0,0);
+        const dDay = new Date(d); dDay.setHours(0, 0, 0, 0);
         if (dDay.getTime() === today.getTime()) todayCount++;
       }
     }
@@ -172,8 +176,7 @@ function openFormModal() {
   $("formOverlay").classList.add("is-open");
   $("formOverlay").setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
-  // Focus first input
-  setTimeout(() => { $("khatianNo").focus(); }, 120);
+  setTimeout(() => { const el = $("khatianNo"); if (el) el.focus(); }, 120);
 }
 
 function closeFormModal() {
@@ -184,18 +187,15 @@ function closeFormModal() {
 
 $("inputToggleBtn").addEventListener("click", () => {
   clearForm();
-  resetQRPreview();
   openFormModal();
 });
 
 $("modalCloseBtn").addEventListener("click", closeFormModal);
 
-// Close on overlay click (outside modal)
 $("formOverlay").addEventListener("click", (e) => {
   if (e.target === $("formOverlay")) closeFormModal();
 });
 
-// Close on Escape key (form modal + QR modal)
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if ($("formOverlay").classList.contains("is-open")) closeFormModal();
@@ -205,7 +205,7 @@ document.addEventListener("keydown", (e) => {
 
 /* ── Login ─────────────────────────────────────────────── */
 function setLoginStatus(message, isSuccess = false) {
-  const status  = $("loginStatus");
+  const status = $("loginStatus");
   status.textContent = message;
   status.style.color = isSuccess ? "#08733a" : "#c62828";
 }
@@ -220,12 +220,10 @@ async function unlockAdmin(skipTokenWrite = false) {
   sessionStorage.setItem(SESSION_KEY, "yes");
 
   if (!skipTokenWrite) {
-    // Write a new session token to Firebase and store locally
     currentSessionToken = generateToken();
     sessionStorage.setItem(SESSION_TOKEN_KEY, currentSessionToken);
     await sessionTokenRef.set(currentSessionToken);
   } else {
-    // Restore token from sessionStorage
     currentSessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
   }
 
@@ -247,7 +245,6 @@ function lockAdmin(forceMessage) {
   $("notifPanel").classList.remove("open");
   closeFormModal();
 
-  // Stop watchers
   if (passwordWatcher) {
     passwordRef.off("value", passwordWatcher);
     passwordWatcher = null;
@@ -258,7 +255,7 @@ function lockAdmin(forceMessage) {
     banner.className = "force-logout-banner";
     banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${forceMessage}`;
     document.body.prepend(banner);
-    setTimeout(() => banner.remove(), 5500);
+    setTimeout(() => { if (banner.parentNode) banner.remove(); }, 5500);
   }
 }
 
@@ -272,20 +269,11 @@ async function checkPassword(inputPassword) {
 }
 
 /* ── Force-Logout Watchers ─────────────────────────────── */
-
-/*
-  Password watcher: যদি পাসওয়ার্ড পরিবর্তন হয় তাহলে
-  সব লগইন করা ডিভাইস কে force logout করতে হবে।
-  এর জন্য আমরা password change এর সাথে সাথে
-  Firebase-এ একটি নতুন session_token লিখি,
-  এবং প্রতিটি লগইন করা ডিভাইস সেই token watch করে।
-  Token মিলে না গেলে logout।
-*/
 let savedPasswordSnapshot = null;
 
 function startPasswordWatcher() {
   if (passwordWatcher) return;
-  // Store the current password value at login time
+
   passwordRef.once("value").then(snap => {
     savedPasswordSnapshot = snap.val();
   });
@@ -305,9 +293,8 @@ function startSessionTokenWatcher() {
   sessionTokenRef.on("value", (snap) => {
     const token = snap.val();
     if (!currentSessionToken) return;
-    // If the stored token differs, another device changed it → force logout
     if (token && token !== currentSessionToken) {
-      lockAdmin("অন্য ডিভাইস থেকে পাসওয়ার্ড পরিবর্তন করা হয়েছে। নিরাপত্তার জন্য আপনাকে Logout করা হয়েছে।");
+      lockAdmin("অন্য ডিভাইস থেকে Login করা হয়েছে। নিরাপত্তার জন্য আপনাকে Logout করা হয়েছে।");
     }
   });
 }
@@ -319,12 +306,13 @@ $("loginForm").addEventListener("submit", async (event) => {
 
   const loginBtn = $("loginForm").querySelector(".login-btn");
   loginBtn.disabled = true;
-  setLoginStatus("Password check হচ্ছে...");
+  loginBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> যাচাই হচ্ছে...';
+  setLoginStatus("Password check হচ্ছে...", true);
 
   try {
     const isValid = await checkPassword(password);
     if (isValid) {
-      setLoginStatus("Login successful", true);
+      setLoginStatus("Login সফল হয়েছে!", true);
       await unlockAdmin(false);
     } else {
       setLoginStatus("Password ভুল। Admin Panel খোলা যাবে না।");
@@ -334,6 +322,7 @@ $("loginForm").addEventListener("submit", async (event) => {
     setLoginStatus(error.message || "Firebase password read করা যায়নি।");
   } finally {
     loginBtn.disabled = false;
+    loginBtn.innerHTML = '<i class="fa-solid fa-lock-open"></i> Login করুন';
   }
 });
 
@@ -370,7 +359,8 @@ function getFormData() {
 function fillForm(id, data = {}) {
   $("recordId").value = id;
   ["khatianNo","ownerName","dagNo","survey","mouza","upazila","district","division","recordDate"]
-    .forEach(key => { $(key).value = data[key] || ""; });
+    .forEach(key => { const el = $(key); if (el) el.value = data[key] || ""; });
+
   const badge = $("formBadge");
   if (badge) badge.textContent = "Edit মোড";
   const titleText = $("formModalTitleText");
@@ -381,17 +371,24 @@ function fillForm(id, data = {}) {
 function clearForm(options = {}) {
   $("recordForm").reset();
   $("recordId").value = "";
+
   const badge = $("formBadge");
   if (badge) badge.textContent = "নতুন তথ্য";
   const titleText = $("formModalTitleText");
   if (titleText) titleText.textContent = "নতুন তথ্য যোগ করুন";
-  if (!options.keepStatus) $("statusText").textContent = "";
+  if (!options.keepStatus) {
+    const st = $("statusText");
+    if (st) st.textContent = "";
+  }
 }
 
 function safeText(value = "") {
   return String(value)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 /* ── Date Formatting ───────────────────────────────────── */
@@ -399,13 +396,12 @@ function formatDateBangla(isoString) {
   if (!isoString) return "—";
   const d = new Date(isoString);
   if (isNaN(d)) return "—";
-  const day    = d.getDate();
   const months = ["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন",
                   "জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"];
-  return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/* ── QR Modal System ───────────────────────────────────────── */
+/* ── QR Modal System ───────────────────────────────────── */
 
 const QR_SIZES    = { small: 256, medium: 512, large: 1024 };
 const QR_PREF_KEY = "qr_download_size_pref";
@@ -413,6 +409,7 @@ const QR_PREF_KEY = "qr_download_size_pref";
 let qrSelectedSize    = "medium";
 let qrSelectedCustomW = 800;
 let qrSelectedCustomH = 800;
+let currentQrLink     = "";
 
 // Restore saved preference
 (function restoreQrSizePref() {
@@ -450,12 +447,16 @@ document.querySelectorAll(".qr-size-btn").forEach(btn => {
   btn.addEventListener("click", () => applyQrSizeUI(btn.dataset.size));
 });
 
-$("qrCustomW") && $("qrCustomW").addEventListener("change", (e) => {
+const qrCustomW = $("qrCustomW");
+const qrCustomH = $("qrCustomH");
+
+if (qrCustomW) qrCustomW.addEventListener("change", (e) => {
   qrSelectedCustomW = Math.max(100, Math.min(4000, parseInt(e.target.value) || 800));
   e.target.value = qrSelectedCustomW;
   saveQrSizePref();
 });
-$("qrCustomH") && $("qrCustomH").addEventListener("change", (e) => {
+
+if (qrCustomH) qrCustomH.addEventListener("change", (e) => {
   qrSelectedCustomH = Math.max(100, Math.min(4000, parseInt(e.target.value) || 800));
   e.target.value = qrSelectedCustomH;
   saveQrSizePref();
@@ -476,6 +477,7 @@ function closeQrModal() {
   document.body.style.overflow = "";
   $("qrcode").innerHTML = "";
   $("generatedLink").textContent = "";
+  currentQrLink = "";
   activeQrId = null;
 }
 
@@ -499,42 +501,50 @@ function makeDetailsLink(id) {
 
 function resetQRPreview() {
   activeQrId = null;
+  currentQrLink = "";
 }
 
 function showQR(id) {
   const link = makeDetailsLink(id);
-  activeQrId = id;
+  activeQrId   = id;
+  currentQrLink = link;
 
   $("qrModalTitleText").textContent = getRecordTitle(id);
-  $("generatedLink").textContent = link;
+  $("generatedLink").textContent    = link;
 
   const qrContainer = $("qrcode");
   qrContainer.innerHTML = "";
 
+  // Generate QR at 200×200 for preview (crisp display)
   new QRCode(qrContainer, {
-    text: link,
-    width: 200,
-    height: 200,
+    text:         link,
+    width:        200,
+    height:       200,
     correctLevel: QRCode.CorrectLevel.H
   });
 
-  const qrImage = qrContainer.querySelector("img");
-  if (qrImage) qrImage.remove();
-  const qrCanvas = qrContainer.querySelector("canvas");
-  if (qrCanvas) {
-    qrCanvas.setAttribute("aria-label", "Generated QR Code");
-    qrCanvas.style.cssText = "display:block !important;width:200px !important;height:200px !important;";
-  }
+  // Hide the img fallback, keep only the canvas
+  setTimeout(() => {
+    const qrImg = qrContainer.querySelector("img");
+    if (qrImg) qrImg.remove();
+    const qrCanvas = qrContainer.querySelector("canvas");
+    if (qrCanvas) {
+      qrCanvas.setAttribute("aria-label", "Generated QR Code");
+    }
+  }, 50);
 
   openQrModal();
 }
 
-/* ── QR Download (High Resolution) ──────────────────────────── */
+/* ── QR Download: High-Resolution PNG ─────────────────────
+   Strategy: regenerate QR at the exact export size using a
+   fresh QRCode instance in a hidden container so the download
+   is always sharp regardless of the preview size.
+──────────────────────────────────────────────────────────── */
 function downloadCurrentQR() {
-  const qrCanvas = $("qrcode").querySelector("canvas");
-  const linkText = $("generatedLink").textContent.trim();
+  const linkText = currentQrLink || $("generatedLink").textContent.trim();
 
-  if (!linkText || !qrCanvas) {
+  if (!linkText) {
     showToast("আগে QR বাটনে ক্লিক করে QR Code তৈরি করুন।", true);
     return;
   }
@@ -545,30 +555,100 @@ function downloadCurrentQR() {
     exportH = qrSelectedCustomH || 800;
   } else {
     const px = QR_SIZES[qrSelectedSize] || 512;
-    exportW = px; exportH = px;
+    exportW  = px;
+    exportH  = px;
   }
 
-  const exportCanvas = document.createElement("canvas");
-  exportCanvas.width  = exportW;
-  exportCanvas.height = exportH;
-  const ctx = exportCanvas.getContext("2d");
+  // Use the max side for QR generation (it must be square)
+  const qrSize = Math.max(exportW, exportH);
+
+  // Create a hidden off-screen container for the high-res QR
+  const hiddenDiv = document.createElement("div");
+  hiddenDiv.style.cssText = "position:absolute;top:-9999px;left:-9999px;width:" + qrSize + "px;height:" + qrSize + "px;";
+  document.body.appendChild(hiddenDiv);
+
+  const downloadBtn = $("downloadQrBtn");
+  if (downloadBtn) {
+    downloadBtn.disabled = true;
+    downloadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> তৈরি হচ্ছে...';
+  }
+
+  try {
+    const hiResQR = new QRCode(hiddenDiv, {
+      text:         linkText,
+      width:        qrSize,
+      height:       qrSize,
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    // QRCode.js renders synchronously when using canvas mode
+    setTimeout(() => {
+      try {
+        const hiCanvas = hiddenDiv.querySelector("canvas");
+
+        if (!hiCanvas) {
+          // Fallback: scale up from preview canvas
+          const previewCanvas = $("qrcode").querySelector("canvas");
+          if (!previewCanvas) {
+            showToast("QR Code canvas পাওয়া যায়নি।", true);
+            return;
+          }
+          scaleAndDownload(previewCanvas, exportW, exportH, linkText);
+        } else {
+          // If exportW !== exportH, draw to a final canvas at exact dimensions
+          if (exportW === exportH) {
+            triggerDownload(hiCanvas, exportW, exportH, linkText);
+          } else {
+            scaleAndDownload(hiCanvas, exportW, exportH, linkText);
+          }
+        }
+      } finally {
+        if (hiddenDiv.parentNode) hiddenDiv.remove();
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.innerHTML = '<i class="fa-solid fa-download"></i> Download QR';
+        }
+      }
+    }, 100);
+
+  } catch (err) {
+    console.error("QR generation error:", err);
+    if (hiddenDiv.parentNode) hiddenDiv.remove();
+    if (downloadBtn) {
+      downloadBtn.disabled = false;
+      downloadBtn.innerHTML = '<i class="fa-solid fa-download"></i> Download QR';
+    }
+    showToast("QR Code তৈরিতে সমস্যা হয়েছে।", true);
+  }
+}
+
+function scaleAndDownload(sourceCanvas, exportW, exportH, linkText) {
+  const finalCanvas = document.createElement("canvas");
+  finalCanvas.width  = exportW;
+  finalCanvas.height = exportH;
+  const ctx = finalCanvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, exportW, exportH);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(qrCanvas, 0, 0, exportW, exportH);
+  ctx.drawImage(sourceCanvas, 0, 0, exportW, exportH);
+  triggerDownload(finalCanvas, exportW, exportH, linkText);
+}
 
+function triggerDownload(canvas, w, h, linkText) {
   const record    = allRecords[activeQrId] || {};
   const cleanName = String(record.khatianNo || activeQrId || Date.now())
-    .replace(/[^a-zA-Z0-9ঀ-৿_-]/g, "-");
+    .replace(/[^a-zA-Z0-9ঀ-৿_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 
   const a = document.createElement("a");
-  a.download = `qr-${cleanName}-${exportW}x${exportH}.jpg`;
-  a.href     = exportCanvas.toDataURL("image/jpeg", 0.97);
+  a.download = `qr-${cleanName}-${w}x${h}.png`;
+  a.href     = canvas.toDataURL("image/png");
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
 
-  showToast(`✓ QR Code ${exportW}×${exportH}px download হয়েছে`);
+  showToast(`✓ QR Code ${w}×${h}px PNG ফরম্যাটে download হয়েছে`);
 }
 
 $("downloadQrBtn").addEventListener("click", downloadCurrentQR);
@@ -579,6 +659,12 @@ $("recordForm").addEventListener("submit", async (event) => {
   const id   = $("recordId").value;
   const data = getFormData();
 
+  // Basic validation
+  if (!data.khatianNo || !data.ownerName || !data.dagNo) {
+    showToast("খতিয়ান নং, মালিকের নাম এবং দাগ নং আবশ্যক।", true);
+    return;
+  }
+
   const saveBtn = $("recordForm").querySelector(".btn-primary");
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Save হচ্ছে...';
@@ -587,18 +673,18 @@ $("recordForm").addEventListener("submit", async (event) => {
     if (id) {
       await db.ref(`khatian_records/${id}`).update(data);
       showToast("✓ তথ্য Update হয়েছে");
-      showQR(id);
       closeFormModal();
+      showQR(id);
     } else {
       const newRef = recordsRef.push();
       await newRef.set({ ...data, createdAt: new Date().toISOString() });
       showToast("✓ নতুন তথ্য Save হয়েছে এবং QR Code তৈরি হয়েছে");
-      showQR(newRef.key);
       clearForm({ keepStatus: true });
       closeFormModal();
+      showQR(newRef.key);
     }
   } catch (error) {
-    console.error(error);
+    console.error("Save error:", error);
     showToast("Save করা যায়নি। Firebase config / database rules চেক করুন।", true);
   } finally {
     saveBtn.disabled = false;
@@ -633,21 +719,28 @@ function getDateCellHTML(data) {
 function renderRecords() {
   const query = $("searchInput").value.toLowerCase().trim();
   const rows  = Object.entries(allRecords)
-    .filter(([, data]) => JSON.stringify(data).toLowerCase().includes(query))
+    .filter(([, data]) => {
+      if (!query) return true;
+      return [data.khatianNo, data.ownerName, data.dagNo, data.district, data.mouza, data.upazila]
+        .some(v => v && String(v).toLowerCase().includes(query));
+    })
     .reverse();
 
   $("recordCount").textContent = `${rows.length} Records`;
 
   if (!rows.length) {
-    $("recordsBody").innerHTML = '<tr><td colspan="7">কোনো তথ্য নেই</td></tr>';
-    $("mobileCards").innerHTML = '<p style="padding:16px;color:var(--muted);text-align:center;">কোনো তথ্য নেই</p>';
+    const emptyMsg = query
+      ? `"${safeText(query)}" — কোনো তথ্য পাওয়া যায়নি`
+      : "কোনো তথ্য নেই";
+    $("recordsBody").innerHTML = `<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted);">${emptyMsg}</td></tr>`;
+    $("mobileCards").innerHTML = `<p style="padding:20px;color:var(--muted);text-align:center;">${emptyMsg}</p>`;
     return;
   }
 
-  // Desktop table (7 columns now: added date column)
+  // Desktop table
   $("recordsBody").innerHTML = rows.map(([id, data]) => `
     <tr>
-      <td>${safeText(data.khatianNo || "—")}</td>
+      <td><strong>${safeText(data.khatianNo || "—")}</strong></td>
       <td>${safeText((data.ownerName || "—").slice(0, 90))}</td>
       <td>${safeText(data.dagNo || "—")}</td>
       <td>${safeText(data.mouza || "—")}, ${safeText(data.upazila || "—")}, ${safeText(data.district || "—")}</td>
@@ -690,6 +783,12 @@ function renderRecords() {
   `).join("");
 }
 
+/* Debounced search rendering */
+function scheduleRender() {
+  clearTimeout(renderDebounceTimer);
+  renderDebounceTimer = setTimeout(renderRecords, 180);
+}
+
 /* ── Firebase Listener ─────────────────────────────────── */
 function startRecordsListener() {
   if (recordsListenerStarted) return;
@@ -701,8 +800,9 @@ function startRecordsListener() {
     updateDashboard();
     buildNotifications();
   }, (error) => {
-    console.error(error);
-    $("recordsBody").innerHTML = '<tr><td colspan="7">Firebase থেকে data load করা যায়নি।</td></tr>';
+    console.error("Firebase listener error:", error);
+    $("recordsBody").innerHTML =
+      '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger);">Firebase থেকে data load করা যায়নি। Database rules চেক করুন।</td></tr>';
   });
 }
 
@@ -717,18 +817,23 @@ document.addEventListener("click", async (event) => {
 
   if (editId)   fillForm(editId, allRecords[editId]);
   if (qrId)     showQR(qrId);
-  if (deleteId && confirm("এই তথ্য Delete করবেন?")) {
+
+  if (deleteId) {
+    if (!confirm("এই তথ্য Delete করবেন? এই কাজ undo করা যাবে না।")) return;
     try {
+      btn.disabled = true;
       await db.ref(`khatian_records/${deleteId}`).remove();
       showToast("✓ তথ্য Delete হয়েছে");
-      if (activeQrId === deleteId) resetQRPreview();
+      if (activeQrId === deleteId) closeQrModal();
     } catch (err) {
+      console.error("Delete error:", err);
       showToast("Delete করা যায়নি।", true);
+      btn.disabled = false;
     }
   }
 });
 
-$("searchInput").addEventListener("input", renderRecords);
+$("searchInput").addEventListener("input", scheduleRender);
 
 $("resetBtn").addEventListener("click", () => {
   clearForm();
@@ -746,53 +851,29 @@ function resetAdminView() {
 $("refreshBtn").addEventListener("click", resetAdminView);
 
 $("copyLinkBtn").addEventListener("click", async () => {
-  const link = $("generatedLink").textContent.trim();
+  const link = currentQrLink || $("generatedLink").textContent.trim();
   if (!link) { showToast("আগে QR Code তৈরি করুন।", true); return; }
   try {
     await navigator.clipboard.writeText(link);
     showToast("✓ Link copy হয়েছে");
   } catch {
-    showToast("Link copy করা যায়নি।", true);
+    // Fallback for older browsers
+    const ta = document.createElement("textarea");
+    ta.value = link;
+    ta.style.cssText = "position:fixed;top:-999px;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      showToast("✓ Link copy হয়েছে");
+    } catch {
+      showToast("Link copy করা যায়নি। ম্যানুয়ালি কপি করুন।", true);
+    }
+    document.body.removeChild(ta);
   }
 });
 
-/* ── QR Download as JPG ────────────────────────────────── */
-function downloadCurrentQR() {
-  const qrCanvas  = $("qrcode").querySelector("canvas");
-  const linkText  = $("generatedLink").textContent.trim();
-
-  if (!linkText || !qrCanvas) {
-    showToast("আগে QR বাটনে ক্লিক করে QR Code তৈরি করুন।", true);
-    return;
-  }
-
-  // Export at 200×200 for crisp print quality (despite 120×120 preview)
-  const exportCanvas = document.createElement("canvas");
-  const size = 200;
-  exportCanvas.width  = size;
-  exportCanvas.height = size;
-  const ctx = exportCanvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, size, size);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(qrCanvas, 0, 0, size, size);
-
-  const record    = allRecords[activeQrId] || {};
-  const cleanName = String(record.khatianNo || activeQrId || Date.now())
-    .replace(/[^a-zA-Z0-9ঀ-৿_-]/g, "-");
-
-  const a = document.createElement("a");
-  a.download = `qr-code-${cleanName}.jpg`;
-  a.href     = exportCanvas.toDataURL("image/jpeg", 0.95);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-
-  showToast("✓ QR Code JPG ফরম্যাটে download হয়েছে");
-}
-
 /* ── Session Restore ───────────────────────────────────── */
 if (sessionStorage.getItem(SESSION_KEY) === "yes") {
-  // Restore session without writing a new token
   unlockAdmin(true);
 }
