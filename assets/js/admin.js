@@ -1,15 +1,4 @@
-/* =========================================================
-   ADMIN PANEL FIREBASE SYSTEM  v4
-   - Modal-based তথ্য ইনপুট ফর্ম (header button থেকে open)
-   - Force logout: password change হলে সব ডিভাইস logout
-   - তারিখ সহ record table (createdAt + recordDate)
-   - QR Download: Fixed high-res PNG (small/medium/large/custom)
-   - Toast notification system
-   - Dashboard summary cards
-   - Notification bell (3-day alert)
-   - Mobile card layout
-   - Performance-optimized, bug-free
-========================================================= */
+
 
 const firebaseConfig = {
   apiKey: "AIzaSyCMA0cJhgirtlHpVK0FOGh4adVlic0UhXs",
@@ -39,10 +28,32 @@ let activeQrId = null;
 let passwordWatcher = null;
 let currentSessionToken = null;
 let renderDebounceTimer = null;
+let lastUnreadCount = 0;
 
 const SESSION_KEY       = "qr_admin_logged_in";
 const SESSION_TOKEN_KEY = "qr_admin_session_token";
 const NOTIF_KEY         = "qr_admin_notifs_read";
+
+/* ── Notification UI স্টাইল (নতুন) ─────────────────────── */
+(function injectNotifStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    .notif-item { position: relative; }
+    .notif-item-dot {
+      position: absolute; top: 14px; right: 12px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #e63946;
+    }
+    @keyframes notifBadgePulse {
+      0%   { transform: scale(1); }
+      30%  { transform: scale(1.35); }
+      60%  { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+    .notif-badge-pulse { animation: notifBadgePulse 0.45s ease; }
+  `;
+  document.head.appendChild(style);
+})();
 
 /* ── Toast System ───────────────────────────────────────── */
 let toastContainer = null;
@@ -70,12 +81,15 @@ function showToast(message, isError = false, duration = 3200) {
 
 /* ── Notifications ─────────────────────────────────────── */
 function getReadNotifs() {
-  try { return JSON.parse(sessionStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; }
 }
 
 function markNotifsRead(ids) {
   const existing = getReadNotifs();
-  sessionStorage.setItem(NOTIF_KEY, JSON.stringify([...new Set([...existing, ...ids])]));
+  const merged = [...new Set([...existing, ...ids])];
+  // পুরনো id জমতে জমতে যেন storage অযথা বড় না হয়ে যায় — সর্বশেষ ২০০০টা রাখি
+  const trimmed = merged.length > 2000 ? merged.slice(merged.length - 2000) : merged;
+  localStorage.setItem(NOTIF_KEY, JSON.stringify(trimmed));
 }
 
 function getAgeDays(createdAt) {
@@ -83,6 +97,25 @@ function getAgeDays(createdAt) {
   const created = new Date(createdAt);
   if (isNaN(created)) return null;
   return Math.floor((Date.now() - created.getTime()) / 86400000);
+}
+
+function formatRelativeTime(createdAt) {
+  if (!createdAt) return "";
+  const created = new Date(createdAt);
+  if (isNaN(created)) return "";
+  const diffSec = Math.floor((Date.now() - created.getTime()) / 1000);
+
+  if (diffSec < 60) return "এইমাত্র";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} মিনিট আগে`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} ঘণ্টা আগে`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 30) return `${diffDay} দিন আগে`;
+  const diffMonth = Math.floor(diffDay / 30);
+  if (diffMonth < 12) return `${diffMonth} মাস আগে`;
+  const diffYear = Math.floor(diffMonth / 12);
+  return `${diffYear} বছর আগে`;
 }
 
 function buildNotifications() {
@@ -100,11 +133,19 @@ function buildNotifications() {
   const badge  = $("notifBadge");
 
   if (unread.length > 0) {
+    const isNewUnread = unread.length > lastUnreadCount;
     badge.textContent = unread.length > 99 ? "99+" : unread.length;
     badge.style.display = "flex";
+    if (isNewUnread) {
+      badge.classList.remove("notif-badge-pulse");
+      // reflow যাতে animation আবার শুরু হয়
+      void badge.offsetWidth;
+      badge.classList.add("notif-badge-pulse");
+    }
   } else {
     badge.style.display = "none";
   }
+  lastUnreadCount = unread.length;
 
   const list = $("notifList");
   if (!notifications.length) {
@@ -121,8 +162,9 @@ function buildNotifications() {
         <div class="notif-item-icon"><i class="fa-solid fa-bell"></i></div>
         <div class="notif-item-body">
           <div class="notif-item-text">${khatian}${owner}-এর বয়স ${age} দিন। সিলেক্টের জন্য প্রস্তুত।</div>
-          <div class="notif-item-meta">${age} দিন আগে তৈরি হয়েছে</div>
+          <div class="notif-item-meta">${formatRelativeTime(data.createdAt)}</div>
         </div>
+        ${isUnread ? '<div class="notif-item-dot"></div>' : ""}
       </li>`;
   }).join("");
 }
@@ -134,6 +176,15 @@ $("notifBtn").addEventListener("click", (e) => {
 
 document.addEventListener("click", (e) => {
   if (!$("notifWrapper").contains(e.target)) $("notifPanel").classList.remove("open");
+});
+
+// প্রতিটা নোটিফিকেশনে ক্লিক করলেই সেটা আলাদাভাবে read হয়ে যাবে
+$("notifList").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-notif-id]");
+  if (!item) return;
+  const id = item.dataset.notifId;
+  markNotifsRead([id]);
+  buildNotifications();
 });
 
 $("clearNotifBtn").addEventListener("click", () => {
