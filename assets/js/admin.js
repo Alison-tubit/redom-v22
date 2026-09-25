@@ -981,7 +981,7 @@ document.addEventListener("click", async (event) => {
   if (qrId) {
     const record = allRecords[qrId];
     if (!record || !record.paid) {
-      showLockedPopup("এই রেকর্ডটি এখনো Unpaid/Locked। Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন, তারপর QR/Link দেখা যাবে।");
+      showLockedPopup("এই রেকর্ডটি বর্তমানে Unpaid/Locked অবস্থায় রয়েছে। আপনার বন্ধুর বিকাশ অ্যাকাউন্টে পেমেন্ট পাঠানোর পর স্বয়ংক্রিয়ভাবে রেকর্ডটি Unlock হয়ে যাবে, এবং এরপর আপনি QR Code/Link দেখতে পারবেন।");
     } else {
       showQR(qrId);
     }
