@@ -1,5 +1,3 @@
-
-
 const firebaseConfig = {
   apiKey: "AIzaSyCMA0cJhgirtlHpVK0FOGh4adVlic0UhXs",
   authDomain: "https-dlrms-land.firebaseapp.com",
@@ -26,6 +24,7 @@ let allRecords = {};
 let recordsListenerStarted = false;
 let activeQrId = null;
 let passwordWatcher = null;
+let sessionTokenWatcher = null;
 let currentSessionToken = null;
 let renderDebounceTimer = null;
 let lastUnreadCount = 0;
@@ -54,6 +53,117 @@ const NOTIF_KEY         = "qr_admin_notifs_read";
   `;
   document.head.appendChild(style);
 })();
+
+/* ── Locked Record Alert (full-screen popup) ─────────────── */
+(function injectLockedPopupStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    .locked-popup-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(8, 18, 13, 0.6);
+      backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      opacity: 0; visibility: hidden;
+      transition: opacity .22s ease, visibility 0s linear .22s;
+    }
+    .locked-popup-overlay.open {
+      opacity: 1; visibility: visible;
+      transition: opacity .22s ease, visibility 0s linear 0s;
+    }
+    .locked-popup-card {
+      background: var(--card-bg, #fff);
+      border: 1px solid var(--border, #d0e6da);
+      border-radius: 18px;
+      max-width: 420px; width: 100%;
+      padding: 30px 24px 24px;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+      transform: scale(0.9) translateY(12px);
+      transition: transform .25s ease;
+    }
+    .locked-popup-overlay.open .locked-popup-card {
+      transform: scale(1) translateY(0);
+    }
+    .locked-popup-icon {
+      width: 64px; height: 64px; margin: 0 auto 14px;
+      border-radius: 50%;
+      background: var(--danger-soft, #fff5f5);
+      color: var(--danger, #c62828);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+    }
+    .locked-popup-title {
+      font-size: 17px; font-weight: 700;
+      color: var(--text, #102018);
+      margin: 0 0 10px;
+    }
+    .locked-popup-message {
+      font-size: 14.5px; line-height: 1.65;
+      color: var(--text-2, #3a5242);
+      margin: 0 0 22px;
+    }
+    .locked-popup-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--danger, #c62828);
+      color: #fff; border: none;
+      padding: 11px 28px; border-radius: 10px;
+      font-size: 14.5px; font-weight: 600;
+      cursor: pointer;
+    }
+    .locked-popup-btn:hover { filter: brightness(1.08); }
+    @media (max-width: 480px) {
+      .locked-popup-card { padding: 26px 18px 20px; }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+let lockedPopupOverlay = null;
+
+function ensureLockedPopup() {
+  if (lockedPopupOverlay) return lockedPopupOverlay;
+
+  const overlay = document.createElement("div");
+  overlay.className = "locked-popup-overlay";
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.innerHTML = `
+    <div class="locked-popup-card" role="alertdialog" aria-modal="true" aria-labelledby="lockedPopupTitle" aria-describedby="lockedPopupMessage">
+      <div class="locked-popup-icon"><i class="fa-solid fa-lock"></i></div>
+      <h3 class="locked-popup-title" id="lockedPopupTitle">রেকর্ডটি Locked</h3>
+      <p class="locked-popup-message" id="lockedPopupMessage"></p>
+      <button class="locked-popup-btn" type="button" id="lockedPopupCloseBtn">
+        <i class="fa-solid fa-xmark"></i> বুঝেছি
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => closeLockedPopup();
+  overlay.querySelector("#lockedPopupCloseBtn").addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && overlay.classList.contains("open")) close();
+  });
+
+  lockedPopupOverlay = overlay;
+  return overlay;
+}
+
+function showLockedPopup(message) {
+  const overlay = ensureLockedPopup();
+  overlay.querySelector("#lockedPopupMessage").textContent = message;
+  overlay.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => overlay.classList.add("open"));
+}
+
+function closeLockedPopup() {
+  if (!lockedPopupOverlay) return;
+  lockedPopupOverlay.classList.remove("open");
+  lockedPopupOverlay.setAttribute("aria-hidden", "true");
+}
 
 /* ── Toast System ───────────────────────────────────────── */
 let toastContainer = null;
@@ -201,10 +311,9 @@ $("clearNotifBtn").addEventListener("click", () => {
 function updateDashboard() {
   const records = Object.values(allRecords);
   const today   = new Date(); today.setHours(0, 0, 0, 0);
-  let total = records.length, todayCount = 0, ready = 0, pending = 0;
+  let total = records.length, todayCount = 0, paid = 0, unpaid = 0;
 
   records.forEach(data => {
-    const age = getAgeDays(data.createdAt);
     if (data.createdAt) {
       const d = new Date(data.createdAt);
       if (!isNaN(d)) {
@@ -212,14 +321,13 @@ function updateDashboard() {
         if (dDay.getTime() === today.getTime()) todayCount++;
       }
     }
-    if (age === null) { pending++; return; }
-    if (age >= 3) ready++; else pending++;
+    if (data.paid) paid++; else unpaid++;
   });
 
-  $("statTotal").textContent   = total;
-  $("statToday").textContent   = todayCount;
-  $("statReady").textContent   = ready;
-  $("statPending").textContent = pending;
+  $("statTotal").textContent  = total;
+  $("statToday").textContent  = todayCount;
+  $("statPaid").textContent   = paid;
+  $("statUnpaid").textContent = unpaid;
 }
 
 /* ── Modal Form ────────────────────────────────────────── */
@@ -286,7 +394,6 @@ async function unlockAdmin(skipTokenWrite = false) {
 function lockAdmin(forceMessage) {
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  sessionStorage.removeItem(NOTIF_KEY);
   currentSessionToken = null;
 
   $("loginScreen").classList.remove("hidden");
@@ -299,6 +406,12 @@ function lockAdmin(forceMessage) {
   if (passwordWatcher) {
     passwordRef.off("value", passwordWatcher);
     passwordWatcher = null;
+  }
+  savedPasswordSnapshot = null;
+
+  if (sessionTokenWatcher) {
+    sessionTokenRef.off("value", sessionTokenWatcher);
+    sessionTokenWatcher = null;
   }
 
   if (forceMessage) {
@@ -341,7 +454,9 @@ function startPasswordWatcher() {
 }
 
 function startSessionTokenWatcher() {
-  sessionTokenRef.on("value", (snap) => {
+  if (sessionTokenWatcher) return;
+
+  sessionTokenWatcher = sessionTokenRef.on("value", (snap) => {
     const token = snap.val();
     if (!currentSessionToken) return;
     if (token && token !== currentSessionToken) {
@@ -725,14 +840,12 @@ $("recordForm").addEventListener("submit", async (event) => {
       await db.ref(`khatian_records/${id}`).update(data);
       showToast("✓ তথ্য Update হয়েছে");
       closeFormModal();
-      showQR(id);
     } else {
       const newRef = recordsRef.push();
-      await newRef.set({ ...data, createdAt: new Date().toISOString() });
-      showToast("✓ নতুন তথ্য Save হয়েছে এবং QR Code তৈরি হয়েছে");
+      await newRef.set({ ...data, paid: false, createdAt: new Date().toISOString() });
+      showToast("✓ নতুন তথ্য Save হয়েছে। এটি এখন Unpaid/Locked — Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন।");
       clearForm({ keepStatus: true });
       closeFormModal();
-      showQR(newRef.key);
     }
   } catch (error) {
     console.error("Save error:", error);
@@ -745,10 +858,8 @@ $("recordForm").addEventListener("submit", async (event) => {
 
 /* ── Render Records ────────────────────────────────────── */
 function getStatusHTML(data) {
-  const age = getAgeDays(data.createdAt);
-  if (age === null) return '<span class="status-badge pending"><i class="fa-solid fa-clock"></i> Pending</span>';
-  if (age >= 3)     return `<span class="status-badge ready"><i class="fa-solid fa-circle-check"></i> প্রস্তুত</span>`;
-  return `<span class="status-badge pending"><i class="fa-solid fa-clock"></i> Pending</span>`;
+  if (data.paid) return '<span class="status-badge ready"><i class="fa-solid fa-circle-check"></i> Paid</span>';
+  return '<span class="status-badge pending"><i class="fa-solid fa-lock"></i> Unpaid</span>';
 }
 
 function getAgeLine(data) {
@@ -867,7 +978,14 @@ document.addEventListener("click", async (event) => {
   const qrId     = btn.dataset.qr;
 
   if (editId)   fillForm(editId, allRecords[editId]);
-  if (qrId)     showQR(qrId);
+  if (qrId) {
+    const record = allRecords[qrId];
+    if (!record || !record.paid) {
+      showLockedPopup("এই রেকর্ডটি এখনো Unpaid/Locked। Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন, তারপর QR/Link দেখা যাবে।");
+    } else {
+      showQR(qrId);
+    }
+  }
 
   if (deleteId) {
     if (!confirm("এই তথ্য Delete করবেন? এই কাজ undo করা যাবে না।")) return;
