@@ -1003,7 +1003,7 @@ document.addEventListener("click", async (event) => {
   if (editId) {
     const record = allRecords[editId];
     if (record && isEditLocked(record)) {
-      showLockedPopup("তৈরি হওয়ার ১ ঘণ্টা পর এই তথ্যটি Edit-এর জন্য Locked হয়ে গেছে। Unlock Page থেকে এটি Unlock করার আগ পর্যন্ত এখানে Edit করা যাবে না।");
+      showLockedPopup("তৈরি হওয়ার ১ ঘণ্টা পর এই তথ্যটি Edit-এর জন্য Locked হয়ে গেছে।");
     } else {
       fillForm(editId, record);
     }
