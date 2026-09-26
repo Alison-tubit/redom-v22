@@ -33,6 +33,18 @@ const SESSION_KEY       = "qr_admin_logged_in";
 const SESSION_TOKEN_KEY = "qr_admin_session_token";
 const NOTIF_KEY         = "qr_admin_notifs_read";
 
+/* ── Edit Lock (১ ঘন্টা পর Edit বন্ধ, Unlock Page থেকে খুলতে হবে) ── */
+const EDIT_LOCK_MS = 60 * 60 * 1000; // ১ ঘণ্টা
+
+function isEditLocked(data) {
+  if (!data) return false;
+  if (data.editUnlocked) return false;      // Unlock Page থেকে Unlock করা থাকলে locked নয়
+  if (!data.createdAt) return false;        // তারিখ না থাকলে lock প্রযোজ্য নয়
+  const created = new Date(data.createdAt);
+  if (isNaN(created)) return false;
+  return (Date.now() - created.getTime()) > EDIT_LOCK_MS;
+}
+
 /* ── Notification UI স্টাইল (নতুন) ─────────────────────── */
 (function injectNotifStyles() {
   const style = document.createElement("style");
@@ -114,6 +126,13 @@ const NOTIF_KEY         = "qr_admin_notifs_read";
     .locked-popup-btn:hover { filter: brightness(1.08); }
     @media (max-width: 480px) {
       .locked-popup-card { padding: 26px 18px 20px; }
+    }
+    .action-btn.is-edit-locked {
+      opacity: 0.7;
+      cursor: not-allowed;
+      background: var(--danger-soft, #fff5f5) !important;
+      color: var(--danger, #c62828) !important;
+      border-color: var(--danger, #c62828) !important;
     }
   `;
   document.head.appendChild(style);
@@ -909,7 +928,9 @@ function renderRecords() {
       <td>${getDateCellHTML(data)}</td>
       <td>${getStatusHTML(data)}${getAgeLine(data)}</td>
       <td>
-        <button class="action-btn edit"   data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+        ${isEditLocked(data)
+          ? `<button class="action-btn edit is-edit-locked" data-edit="${id}" title="Edit Locked — Unlock Page থেকে Unlock করুন"><i class="fa-solid fa-lock"></i> Edit</button>`
+          : `<button class="action-btn edit" data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`}
         <button class="action-btn qr"     data-qr="${id}"><i class="fa-solid fa-qrcode"></i> QR</button>
         <button class="action-btn delete" data-del="${id}"><i class="fa-solid fa-trash"></i></button>
       </td>
@@ -937,7 +958,9 @@ function renderRecords() {
         ${data.createdAt ? ` · তৈরি: ${formatDateBangla(data.createdAt)}` : ""}
       </div>
       <div class="m-card-actions">
-        <button class="action-btn edit"   data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+        ${isEditLocked(data)
+          ? `<button class="action-btn edit is-edit-locked" data-edit="${id}" title="Edit Locked — Unlock Page থেকে Unlock করুন"><i class="fa-solid fa-lock"></i> Edit</button>`
+          : `<button class="action-btn edit" data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`}
         <button class="action-btn qr"     data-qr="${id}"><i class="fa-solid fa-qrcode"></i> QR</button>
         <button class="action-btn delete" data-del="${id}"><i class="fa-solid fa-trash"></i> Delete</button>
       </div>
@@ -977,11 +1000,18 @@ document.addEventListener("click", async (event) => {
   const deleteId = btn.dataset.del;
   const qrId     = btn.dataset.qr;
 
-  if (editId)   fillForm(editId, allRecords[editId]);
+  if (editId) {
+    const record = allRecords[editId];
+    if (record && isEditLocked(record)) {
+      showLockedPopup("তৈরি হওয়ার ১ ঘণ্টা পর এই তথ্যটি Edit-এর জন্য Locked হয়ে গেছে। Unlock Page থেকে এটি Unlock করার আগ পর্যন্ত এখানে Edit করা যাবে না।");
+    } else {
+      fillForm(editId, record);
+    }
+  }
   if (qrId) {
     const record = allRecords[qrId];
     if (!record || !record.paid) {
-      showLockedPopup("এই রেকর্ডটি বর্তমানে Unpaid/Locked অবস্থায় রয়েছে। আপনার বন্ধুর বিকাশ অ্যাকাউন্টে পেমেন্ট পাঠানোর পর স্বয়ংক্রিয়ভাবে রেকর্ডটি Unlock হয়ে যাবে, এবং এরপর আপনি QR Code/Link দেখতে পারবেন। আপনার বন্ধুর কিছুটা আর্থিক সমস্যার কারণে সাময়িকভাবে এই ব্যবস্থা করা হয়েছে। এ কারণে আপনাকে সাময়িক অসুবিধার সম্মুখীন হতে হওয়ায় আমরা আন্তরিকভাবে দুঃখিত এবং আপনার সহযোগিতার জন্য কৃতজ্ঞ। ❤️");
+      showLockedPopup("এই রেকর্ডটি এখনো Unpaid/Locked। Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন, তারপর QR/Link দেখা যাবে।");
     } else {
       showQR(qrId);
     }
