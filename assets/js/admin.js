@@ -30,6 +30,22 @@ let currentSessionToken = null;
 let renderDebounceTimer = null;
 let lastUnreadCount = 0;
 
+// ★ QR Lock সেটিং (Unlock Page-এর বাটন)। true = ON (Paid ছাড়া QR বন্ধ), false = OFF (সব QR খোলা)
+let qrLockEnabled = true;
+let qrLockListenerStarted = false;
+
+function startQrLockListener() {
+  if (qrLockListenerStarted) return;
+  qrLockListenerStarted = true;
+  qrLockRef.on("value", (snap) => {
+    const val = snap.val();
+    // মান না থাকলে নিরাপদ ডিফল্ট ON
+    qrLockEnabled = (val === null || val === undefined) ? true : !!val;
+  }, (err) => {
+    console.error("QR lock setting listener error:", err);
+  });
+}
+
 const SESSION_KEY       = "qr_admin_logged_in";
 const SESSION_TOKEN_KEY = "qr_admin_session_token";
 const NOTIF_KEY         = "qr_admin_notifs_read";
@@ -406,6 +422,7 @@ async function unlockAdmin(skipTokenWrite = false) {
     currentSessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
   }
 
+  startQrLockListener();
   startRecordsListener();
   startPasswordWatcher();
   startSessionTokenWatcher();
@@ -861,27 +878,9 @@ $("recordForm").addEventListener("submit", async (event) => {
       showToast("✓ তথ্য Update হয়েছে");
       closeFormModal();
     } else {
-      // ★ Unlock Page-এর QR Lock বাটন চেক করি।
-      //   ON (বা সেটিং না পাওয়া গেলে) → নতুন রেকর্ড Locked (paid: false)
-      //   OFF                          → নতুন রেকর্ড সরাসরি Unlocked (paid: true)
-      let lockOn = true;
-      try {
-        const lockSnap = await qrLockRef.once("value");
-        lockOn = lockSnap.val() !== false;
-      } catch (lockErr) {
-        console.error("QR lock setting read error:", lockErr);
-      }
-
-      const nowIso = new Date().toISOString();
-      const newRecord = { ...data, paid: !lockOn, createdAt: nowIso };
-      if (!lockOn) newRecord.paidAt = nowIso;
-
       const newRef = recordsRef.push();
-      await newRef.set(newRecord);
-
-      showToast(lockOn
-        ? "✓ নতুন তথ্য Save হয়েছে। এটি এখন Unpaid/Locked — Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন।"
-        : "✓ নতুন তথ্য Save হয়েছে। QR Lock বন্ধ থাকায় এটি সরাসরি Unlocked — QR দেখা যাবে।");
+      await newRef.set({ ...data, paid: false, createdAt: new Date().toISOString() });
+      showToast("✓ নতুন তথ্য Save হয়েছে।");
       clearForm({ keepStatus: true });
       closeFormModal();
     }
@@ -1029,7 +1028,9 @@ document.addEventListener("click", async (event) => {
   }
   if (qrId) {
     const record = allRecords[qrId];
-    if (!record || !record.paid) {
+    // ★ QR Lock OFF হলে Paid না হলেও QR খুলবে; ON হলে শুধু Paid রেকর্ডে
+    if (!record) return;
+    if (qrLockEnabled && !record.paid) {
       showLockedPopup("এই রেকর্ডটি বর্তমানে Unpaid/Locked অবস্থায় রয়েছে। আপনার বন্ধুর বিকাশ অ্যাকাউন্টে পেমেন্ট পাঠানোর সঙ্গে সঙ্গেই রেকর্ডটি স্বয়ংক্রিয়ভাবে Unlock হয়ে যাবে। এরপর আপনি QR Code/Link দেখতে পারবেন। আপনার বন্ধুর কিছুটা আর্থিক সমস্যার কারণে সাময়িকভাবে এই ব্যবস্থা করা হয়েছে। এ কারণে আপনাকে সাময়িক অসুবিধার সম্মুখীন হতে হওয়ায় আমরা আন্তরিকভাবে দুঃখিত এবং আপনার সহযোগিতার জন্য কৃতজ্ঞ। ❤️");
     } else {
       showQR(qrId);
