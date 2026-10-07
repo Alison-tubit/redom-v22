@@ -17,6 +17,7 @@ const db = firebase.database();
 const recordsRef      = db.ref("khatian_records");
 const passwordRef     = db.ref("admin_settings/password");
 const sessionTokenRef = db.ref("admin_settings/session_token");
+const qrLockRef       = db.ref("admin_settings/qrLockEnabled"); // ★ নতুন: Unlock Page-এর QR Lock বাটনের সেটিং
 
 const $ = (id) => document.getElementById(id);
 
@@ -860,9 +861,27 @@ $("recordForm").addEventListener("submit", async (event) => {
       showToast("✓ তথ্য Update হয়েছে");
       closeFormModal();
     } else {
+      // ★ Unlock Page-এর QR Lock বাটন চেক করি।
+      //   ON (বা সেটিং না পাওয়া গেলে) → নতুন রেকর্ড Locked (paid: false)
+      //   OFF                          → নতুন রেকর্ড সরাসরি Unlocked (paid: true)
+      let lockOn = true;
+      try {
+        const lockSnap = await qrLockRef.once("value");
+        lockOn = lockSnap.val() !== false;
+      } catch (lockErr) {
+        console.error("QR lock setting read error:", lockErr);
+      }
+
+      const nowIso = new Date().toISOString();
+      const newRecord = { ...data, paid: !lockOn, createdAt: nowIso };
+      if (!lockOn) newRecord.paidAt = nowIso;
+
       const newRef = recordsRef.push();
-      await newRef.set({ ...data, paid: false, createdAt: new Date().toISOString() });
-      showToast("✓ নতুন তথ্য Save হয়েছে। এটি এখন Unpaid/Locked — Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন।");
+      await newRef.set(newRecord);
+
+      showToast(lockOn
+        ? "✓ নতুন তথ্য Save হয়েছে। এটি এখন Unpaid/Locked — Unlock Page থেকে Payment নিশ্চিত করে Unlock করুন।"
+        : "✓ নতুন তথ্য Save হয়েছে। QR Lock বন্ধ থাকায় এটি সরাসরি Unlocked — QR দেখা যাবে।");
       clearForm({ keepStatus: true });
       closeFormModal();
     }
