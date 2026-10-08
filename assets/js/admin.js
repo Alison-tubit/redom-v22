@@ -1,16 +1,3 @@
-/* =========================================================
-   ADMIN PANEL FIREBASE SYSTEM  v4
-   - Modal-based তথ্য ইনপুট ফর্ম (header button থেকে open)
-   - Force logout: password change হলে সব ডিভাইস logout
-   - তারিখ সহ record table (createdAt + recordDate)
-   - QR Download: Fixed high-res PNG (small/medium/large/custom)
-   - Toast notification system
-   - Dashboard summary cards
-   - Notification bell (3-day alert)
-   - Mobile card layout
-   - Performance-optimized, bug-free
-========================================================= */
-
 const firebaseConfig = {
   apiKey: "AIzaSyCMA0cJhgirtlHpVK0FOGh4adVlic0UhXs",
   authDomain: "https-dlrms-land.firebaseapp.com",
@@ -30,6 +17,7 @@ const db = firebase.database();
 const recordsRef      = db.ref("khatian_records");
 const passwordRef     = db.ref("admin_settings/password");
 const sessionTokenRef = db.ref("admin_settings/session_token");
+const qrLockRef       = db.ref("admin_settings/qrLockEnabled");
 
 const $ = (id) => document.getElementById(id);
 
@@ -37,14 +25,182 @@ let allRecords = {};
 let recordsListenerStarted = false;
 let activeQrId = null;
 let passwordWatcher = null;
+let sessionTokenWatcher = null;
 let currentSessionToken = null;
 let renderDebounceTimer = null;
+let lastUnreadCount = 0;
+
+// QR Lock: true = ON (Paid ছাড়া QR বন্ধ), false = OFF (সব QR খোলা)
+let qrLockEnabled = true;
+let qrLockListenerStarted = false;
+
+function startQrLockListener() {
+  if (qrLockListenerStarted) return;
+  qrLockListenerStarted = true;
+  qrLockRef.on("value", (snap) => {
+    const val = snap.val();
+    qrLockEnabled = (val === null || val === undefined) ? true : !!val;
+  }, (err) => {
+    console.error("QR lock setting listener error:", err);
+  });
+}
 
 const SESSION_KEY       = "qr_admin_logged_in";
 const SESSION_TOKEN_KEY = "qr_admin_session_token";
 const NOTIF_KEY         = "qr_admin_notifs_read";
 
-/* ── Toast System ───────────────────────────────────────── */
+/* ── Edit Lock (১ ঘন্টা পর Edit বন্ধ) ── */
+const EDIT_LOCK_MS = 60 * 60 * 1000;
+
+function isEditLocked(data) {
+  if (!data) return false;
+  if (data.editUnlocked) return false;
+  if (!data.createdAt) return false;
+  const created = new Date(data.createdAt);
+  if (isNaN(created)) return false;
+  return (Date.now() - created.getTime()) > EDIT_LOCK_MS;
+}
+
+/* ── Notification UI স্টাইল ── */
+(function injectNotifStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    .notif-item { position: relative; }
+    .notif-item-dot {
+      position: absolute; top: 14px; right: 12px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #e63946;
+    }
+    @keyframes notifBadgePulse {
+      0%   { transform: scale(1); }
+      30%  { transform: scale(1.35); }
+      60%  { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+    .notif-badge-pulse { animation: notifBadgePulse 0.45s ease; }
+  `;
+  document.head.appendChild(style);
+})();
+
+/* ── Locked Record Alert (full-screen popup) ── */
+(function injectLockedPopupStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    .locked-popup-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(8, 18, 13, 0.6);
+      backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      opacity: 0; visibility: hidden;
+      transition: opacity .22s ease, visibility 0s linear .22s;
+    }
+    .locked-popup-overlay.open {
+      opacity: 1; visibility: visible;
+      transition: opacity .22s ease, visibility 0s linear 0s;
+    }
+    .locked-popup-card {
+      background: var(--card-bg, #fff);
+      border: 1px solid var(--border, #d0e6da);
+      border-radius: 18px;
+      max-width: 420px; width: 100%;
+      padding: 30px 24px 24px;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+      transform: scale(0.9) translateY(12px);
+      transition: transform .25s ease;
+    }
+    .locked-popup-overlay.open .locked-popup-card {
+      transform: scale(1) translateY(0);
+    }
+    .locked-popup-icon {
+      width: 64px; height: 64px; margin: 0 auto 14px;
+      border-radius: 50%;
+      background: var(--danger-soft, #fff5f5);
+      color: var(--danger, #c62828);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+    }
+    .locked-popup-title {
+      font-size: 17px; font-weight: 700;
+      color: var(--text, #102018);
+      margin: 0 0 10px;
+    }
+    .locked-popup-message {
+      font-size: 14.5px; line-height: 1.65;
+      color: var(--text-2, #3a5242);
+      margin: 0 0 22px;
+    }
+    .locked-popup-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--danger, #c62828);
+      color: #fff; border: none;
+      padding: 11px 28px; border-radius: 10px;
+      font-size: 14.5px; font-weight: 600;
+      cursor: pointer;
+    }
+    .locked-popup-btn:hover { filter: brightness(1.08); }
+    @media (max-width: 480px) {
+      .locked-popup-card { padding: 26px 18px 20px; }
+    }
+    .action-btn.is-edit-locked {
+      opacity: 0.7;
+      cursor: not-allowed;
+      background: var(--danger-soft, #fff5f5) !important;
+      color: var(--danger, #c62828) !important;
+      border-color: var(--danger, #c62828) !important;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+let lockedPopupOverlay = null;
+
+function ensureLockedPopup() {
+  if (lockedPopupOverlay) return lockedPopupOverlay;
+
+  const overlay = document.createElement("div");
+  overlay.className = "locked-popup-overlay";
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.innerHTML = `
+    <div class="locked-popup-card" role="alertdialog" aria-modal="true" aria-labelledby="lockedPopupTitle" aria-describedby="lockedPopupMessage">
+      <div class="locked-popup-icon"><i class="fa-solid fa-lock"></i></div>
+      <h3 class="locked-popup-title" id="lockedPopupTitle">রেকর্ডটি Locked</h3>
+      <p class="locked-popup-message" id="lockedPopupMessage"></p>
+      <button class="locked-popup-btn" type="button" id="lockedPopupCloseBtn">
+        <i class="fa-solid fa-xmark"></i> বুঝেছি
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => closeLockedPopup();
+  overlay.querySelector("#lockedPopupCloseBtn").addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && overlay.classList.contains("open")) close();
+  });
+
+  lockedPopupOverlay = overlay;
+  return overlay;
+}
+
+function showLockedPopup(message) {
+  const overlay = ensureLockedPopup();
+  overlay.querySelector("#lockedPopupMessage").textContent = message;
+  overlay.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => overlay.classList.add("open"));
+}
+
+function closeLockedPopup() {
+  if (!lockedPopupOverlay) return;
+  lockedPopupOverlay.classList.remove("open");
+  lockedPopupOverlay.setAttribute("aria-hidden", "true");
+}
+
+/* ── Toast System ── */
 let toastContainer = null;
 
 function ensureToastContainer() {
@@ -68,14 +224,16 @@ function showToast(message, isError = false, duration = 3200) {
   }, duration);
 }
 
-/* ── Notifications ─────────────────────────────────────── */
+/* ── Notifications ── */
 function getReadNotifs() {
-  try { return JSON.parse(sessionStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; }
 }
 
 function markNotifsRead(ids) {
   const existing = getReadNotifs();
-  sessionStorage.setItem(NOTIF_KEY, JSON.stringify([...new Set([...existing, ...ids])]));
+  const merged = [...new Set([...existing, ...ids])];
+  const trimmed = merged.length > 2000 ? merged.slice(merged.length - 2000) : merged;
+  localStorage.setItem(NOTIF_KEY, JSON.stringify(trimmed));
 }
 
 function getAgeDays(createdAt) {
@@ -83,6 +241,25 @@ function getAgeDays(createdAt) {
   const created = new Date(createdAt);
   if (isNaN(created)) return null;
   return Math.floor((Date.now() - created.getTime()) / 86400000);
+}
+
+function formatRelativeTime(createdAt) {
+  if (!createdAt) return "";
+  const created = new Date(createdAt);
+  if (isNaN(created)) return "";
+  const diffSec = Math.floor((Date.now() - created.getTime()) / 1000);
+
+  if (diffSec < 60) return "এইমাত্র";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} মিনিট আগে`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} ঘণ্টা আগে`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 30) return `${diffDay} দিন আগে`;
+  const diffMonth = Math.floor(diffDay / 30);
+  if (diffMonth < 12) return `${diffMonth} মাস আগে`;
+  const diffYear = Math.floor(diffMonth / 12);
+  return `${diffYear} বছর আগে`;
 }
 
 function buildNotifications() {
@@ -100,11 +277,18 @@ function buildNotifications() {
   const badge  = $("notifBadge");
 
   if (unread.length > 0) {
+    const isNewUnread = unread.length > lastUnreadCount;
     badge.textContent = unread.length > 99 ? "99+" : unread.length;
     badge.style.display = "flex";
+    if (isNewUnread) {
+      badge.classList.remove("notif-badge-pulse");
+      void badge.offsetWidth;
+      badge.classList.add("notif-badge-pulse");
+    }
   } else {
     badge.style.display = "none";
   }
+  lastUnreadCount = unread.length;
 
   const list = $("notifList");
   if (!notifications.length) {
@@ -121,8 +305,9 @@ function buildNotifications() {
         <div class="notif-item-icon"><i class="fa-solid fa-bell"></i></div>
         <div class="notif-item-body">
           <div class="notif-item-text">${khatian}${owner}-এর বয়স ${age} দিন। সিলেক্টের জন্য প্রস্তুত।</div>
-          <div class="notif-item-meta">${age} দিন আগে তৈরি হয়েছে</div>
+          <div class="notif-item-meta">${formatRelativeTime(data.createdAt)}</div>
         </div>
+        ${isUnread ? '<div class="notif-item-dot"></div>' : ""}
       </li>`;
   }).join("");
 }
@@ -136,6 +321,14 @@ document.addEventListener("click", (e) => {
   if (!$("notifWrapper").contains(e.target)) $("notifPanel").classList.remove("open");
 });
 
+$("notifList").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-notif-id]");
+  if (!item) return;
+  const id = item.dataset.notifId;
+  markNotifsRead([id]);
+  buildNotifications();
+});
+
 $("clearNotifBtn").addEventListener("click", () => {
   const allIds = Object.keys(allRecords).filter(id => {
     const age = getAgeDays(allRecords[id]?.createdAt);
@@ -146,14 +339,13 @@ $("clearNotifBtn").addEventListener("click", () => {
   showToast("✓ সব notification পড়া হয়েছে হিসেবে mark করা হয়েছে");
 });
 
-/* ── Dashboard Stats ───────────────────────────────────── */
+/* ── Dashboard Stats ── */
 function updateDashboard() {
   const records = Object.values(allRecords);
   const today   = new Date(); today.setHours(0, 0, 0, 0);
-  let total = records.length, todayCount = 0, ready = 0, pending = 0;
+  let total = records.length, todayCount = 0, paid = 0, unpaid = 0;
 
   records.forEach(data => {
-    const age = getAgeDays(data.createdAt);
     if (data.createdAt) {
       const d = new Date(data.createdAt);
       if (!isNaN(d)) {
@@ -161,17 +353,16 @@ function updateDashboard() {
         if (dDay.getTime() === today.getTime()) todayCount++;
       }
     }
-    if (age === null) { pending++; return; }
-    if (age >= 3) ready++; else pending++;
+    if (data.paid) paid++; else unpaid++;
   });
 
-  $("statTotal").textContent   = total;
-  $("statToday").textContent   = todayCount;
-  $("statReady").textContent   = ready;
-  $("statPending").textContent = pending;
+  $("statTotal").textContent  = total;
+  $("statToday").textContent  = todayCount;
+  $("statPaid").textContent   = paid;
+  $("statUnpaid").textContent = unpaid;
 }
 
-/* ── Modal Form ────────────────────────────────────────── */
+/* ── Modal Form ── */
 function openFormModal() {
   $("formOverlay").classList.add("is-open");
   $("formOverlay").setAttribute("aria-hidden", "false");
@@ -203,7 +394,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-/* ── Login ─────────────────────────────────────────────── */
+/* ── Login ── */
 function setLoginStatus(message, isSuccess = false) {
   const status = $("loginStatus");
   status.textContent = message;
@@ -227,6 +418,7 @@ async function unlockAdmin(skipTokenWrite = false) {
     currentSessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
   }
 
+  startQrLockListener();
   startRecordsListener();
   startPasswordWatcher();
   startSessionTokenWatcher();
@@ -235,7 +427,6 @@ async function unlockAdmin(skipTokenWrite = false) {
 function lockAdmin(forceMessage) {
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  sessionStorage.removeItem(NOTIF_KEY);
   currentSessionToken = null;
 
   $("loginScreen").classList.remove("hidden");
@@ -248,6 +439,12 @@ function lockAdmin(forceMessage) {
   if (passwordWatcher) {
     passwordRef.off("value", passwordWatcher);
     passwordWatcher = null;
+  }
+  savedPasswordSnapshot = null;
+
+  if (sessionTokenWatcher) {
+    sessionTokenRef.off("value", sessionTokenWatcher);
+    sessionTokenWatcher = null;
   }
 
   if (forceMessage) {
@@ -268,7 +465,7 @@ async function checkPassword(inputPassword) {
   return String(inputPassword).trim() === String(savedPassword).trim();
 }
 
-/* ── Force-Logout Watchers ─────────────────────────────── */
+/* ── Force-Logout Watchers ── */
 let savedPasswordSnapshot = null;
 
 function startPasswordWatcher() {
@@ -290,7 +487,9 @@ function startPasswordWatcher() {
 }
 
 function startSessionTokenWatcher() {
-  sessionTokenRef.on("value", (snap) => {
+  if (sessionTokenWatcher) return;
+
+  sessionTokenWatcher = sessionTokenRef.on("value", (snap) => {
     const token = snap.val();
     if (!currentSessionToken) return;
     if (token && token !== currentSessionToken) {
@@ -340,7 +539,7 @@ $("togglePassword").addEventListener("click", () => {
 
 $("logoutBtn").addEventListener("click", () => lockAdmin());
 
-/* ── Form Data ─────────────────────────────────────────── */
+/* ── Form Data ── */
 function getFormData() {
   return {
     khatianNo:  $("khatianNo").value.trim(),
@@ -391,7 +590,7 @@ function safeText(value = "") {
     .replace(/'/g, "&#039;");
 }
 
-/* ── Date Formatting ───────────────────────────────────── */
+/* ── Date Formatting ── */
 function formatDateBangla(isoString) {
   if (!isoString) return "—";
   const d = new Date(isoString);
@@ -401,8 +600,7 @@ function formatDateBangla(isoString) {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/* ── QR Modal System ───────────────────────────────────── */
-
+/* ── QR Modal System ── */
 const QR_SIZES    = { small: 256, medium: 512, large: 1024 };
 const QR_PREF_KEY = "qr_download_size_pref";
 
@@ -411,7 +609,6 @@ let qrSelectedCustomW = 800;
 let qrSelectedCustomH = 800;
 let currentQrLink     = "";
 
-// Restore saved preference
 (function restoreQrSizePref() {
   try {
     const saved = JSON.parse(localStorage.getItem(QR_PREF_KEY) || "{}");
@@ -464,7 +661,6 @@ if (qrCustomH) qrCustomH.addEventListener("change", (e) => {
 
 setTimeout(() => applyQrSizeUI(qrSelectedSize), 0);
 
-/* Modal open / close */
 function openQrModal() {
   $("qrModalOverlay").classList.add("is-open");
   $("qrModalOverlay").setAttribute("aria-hidden", "false");
@@ -486,7 +682,6 @@ $("qrModalOverlay").addEventListener("click", (e) => {
   if (e.target === $("qrModalOverlay")) closeQrModal();
 });
 
-/* QR helper functions */
 function getRecordTitle(id) {
   const record  = allRecords[id] || {};
   const khatian = record.khatianNo ? `খতিয়ান: ${record.khatianNo}` : "নতুন QR Code";
@@ -494,9 +689,14 @@ function getRecordTitle(id) {
   return `${khatian}${owner}`;
 }
 
+/* ★ ফিক্স করা ফাংশন: ব্রাউজার নিজেই বর্তমান পেজের পাশের details.html খুঁজে নেবে।
+   /admin, /admin.html, /folder/admin.html — সব ক্ষেত্রেই কাজ করবে। */
 function makeDetailsLink(id) {
-  const basePath = location.pathname.replace(/admin\.html$/, "");
-  return `${location.origin}${basePath}details.html?id=${id}`;
+  const url = new URL("details.html", window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("id", id);
+  return url.toString();
 }
 
 function resetQRPreview() {
@@ -506,7 +706,7 @@ function resetQRPreview() {
 
 function showQR(id) {
   const link = makeDetailsLink(id);
-  activeQrId   = id;
+  activeQrId    = id;
   currentQrLink = link;
 
   $("qrModalTitleText").textContent = getRecordTitle(id);
@@ -515,7 +715,6 @@ function showQR(id) {
   const qrContainer = $("qrcode");
   qrContainer.innerHTML = "";
 
-  // Generate QR at 200×200 for preview (crisp display)
   new QRCode(qrContainer, {
     text:         link,
     width:        200,
@@ -523,7 +722,6 @@ function showQR(id) {
     correctLevel: QRCode.CorrectLevel.H
   });
 
-  // Hide the img fallback, keep only the canvas
   setTimeout(() => {
     const qrImg = qrContainer.querySelector("img");
     if (qrImg) qrImg.remove();
@@ -536,11 +734,7 @@ function showQR(id) {
   openQrModal();
 }
 
-/* ── QR Download: High-Resolution PNG ─────────────────────
-   Strategy: regenerate QR at the exact export size using a
-   fresh QRCode instance in a hidden container so the download
-   is always sharp regardless of the preview size.
-──────────────────────────────────────────────────────────── */
+/* ── QR Download: High-Resolution PNG ── */
 function downloadCurrentQR() {
   const linkText = currentQrLink || $("generatedLink").textContent.trim();
 
@@ -559,10 +753,8 @@ function downloadCurrentQR() {
     exportH  = px;
   }
 
-  // Use the max side for QR generation (it must be square)
   const qrSize = Math.max(exportW, exportH);
 
-  // Create a hidden off-screen container for the high-res QR
   const hiddenDiv = document.createElement("div");
   hiddenDiv.style.cssText = "position:absolute;top:-9999px;left:-9999px;width:" + qrSize + "px;height:" + qrSize + "px;";
   document.body.appendChild(hiddenDiv);
@@ -574,20 +766,18 @@ function downloadCurrentQR() {
   }
 
   try {
-    const hiResQR = new QRCode(hiddenDiv, {
+    new QRCode(hiddenDiv, {
       text:         linkText,
       width:        qrSize,
       height:       qrSize,
       correctLevel: QRCode.CorrectLevel.H
     });
 
-    // QRCode.js renders synchronously when using canvas mode
     setTimeout(() => {
       try {
         const hiCanvas = hiddenDiv.querySelector("canvas");
 
         if (!hiCanvas) {
-          // Fallback: scale up from preview canvas
           const previewCanvas = $("qrcode").querySelector("canvas");
           if (!previewCanvas) {
             showToast("QR Code canvas পাওয়া যায়নি।", true);
@@ -595,7 +785,6 @@ function downloadCurrentQR() {
           }
           scaleAndDownload(previewCanvas, exportW, exportH, linkText);
         } else {
-          // If exportW !== exportH, draw to a final canvas at exact dimensions
           if (exportW === exportH) {
             triggerDownload(hiCanvas, exportW, exportH, linkText);
           } else {
@@ -653,13 +842,12 @@ function triggerDownload(canvas, w, h, linkText) {
 
 $("downloadQrBtn").addEventListener("click", downloadCurrentQR);
 
-/* ── Save / Update ─────────────────────────────────────── */
+/* ── Save / Update ── */
 $("recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const id   = $("recordId").value;
   const data = getFormData();
 
-  // Basic validation
   if (!data.khatianNo || !data.ownerName || !data.dagNo) {
     showToast("খতিয়ান নং, মালিকের নাম এবং দাগ নং আবশ্যক।", true);
     return;
@@ -674,14 +862,12 @@ $("recordForm").addEventListener("submit", async (event) => {
       await db.ref(`khatian_records/${id}`).update(data);
       showToast("✓ তথ্য Update হয়েছে");
       closeFormModal();
-      showQR(id);
     } else {
       const newRef = recordsRef.push();
-      await newRef.set({ ...data, createdAt: new Date().toISOString() });
-      showToast("✓ নতুন তথ্য Save হয়েছে এবং QR Code তৈরি হয়েছে");
+      await newRef.set({ ...data, paid: false, createdAt: new Date().toISOString() });
+      showToast("✓ নতুন তথ্য Save হয়েছে।");
       clearForm({ keepStatus: true });
       closeFormModal();
-      showQR(newRef.key);
     }
   } catch (error) {
     console.error("Save error:", error);
@@ -692,12 +878,10 @@ $("recordForm").addEventListener("submit", async (event) => {
   }
 });
 
-/* ── Render Records ────────────────────────────────────── */
+/* ── Render Records ── */
 function getStatusHTML(data) {
-  const age = getAgeDays(data.createdAt);
-  if (age === null) return '<span class="status-badge pending"><i class="fa-solid fa-clock"></i> Pending</span>';
-  if (age >= 3)     return `<span class="status-badge ready"><i class="fa-solid fa-circle-check"></i> প্রস্তুত</span>`;
-  return `<span class="status-badge pending"><i class="fa-solid fa-clock"></i> Pending</span>`;
+  if (data.paid) return '<span class="status-badge ready"><i class="fa-solid fa-circle-check"></i> Paid</span>';
+  return '<span class="status-badge pending"><i class="fa-solid fa-lock"></i> Unpaid</span>';
 }
 
 function getAgeLine(data) {
@@ -737,7 +921,6 @@ function renderRecords() {
     return;
   }
 
-  // Desktop table
   $("recordsBody").innerHTML = rows.map(([id, data]) => `
     <tr>
       <td><strong>${safeText(data.khatianNo || "—")}</strong></td>
@@ -747,14 +930,15 @@ function renderRecords() {
       <td>${getDateCellHTML(data)}</td>
       <td>${getStatusHTML(data)}${getAgeLine(data)}</td>
       <td>
-        <button class="action-btn edit"   data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+        ${isEditLocked(data)
+          ? `<button class="action-btn edit is-edit-locked" data-edit="${id}" title="Edit Locked — Unlock Page থেকে Unlock করুন"><i class="fa-solid fa-lock"></i> Edit</button>`
+          : `<button class="action-btn edit" data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`}
         <button class="action-btn qr"     data-qr="${id}"><i class="fa-solid fa-qrcode"></i> QR</button>
         <button class="action-btn delete" data-del="${id}"><i class="fa-solid fa-trash"></i></button>
       </td>
     </tr>
   `).join("");
 
-  // Mobile cards
   $("mobileCards").innerHTML = rows.map(([id, data]) => `
     <div class="m-card">
       <div class="m-card-header">
@@ -775,7 +959,9 @@ function renderRecords() {
         ${data.createdAt ? ` · তৈরি: ${formatDateBangla(data.createdAt)}` : ""}
       </div>
       <div class="m-card-actions">
-        <button class="action-btn edit"   data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+        ${isEditLocked(data)
+          ? `<button class="action-btn edit is-edit-locked" data-edit="${id}" title="Edit Locked — Unlock Page থেকে Unlock করুন"><i class="fa-solid fa-lock"></i> Edit</button>`
+          : `<button class="action-btn edit" data-edit="${id}"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`}
         <button class="action-btn qr"     data-qr="${id}"><i class="fa-solid fa-qrcode"></i> QR</button>
         <button class="action-btn delete" data-del="${id}"><i class="fa-solid fa-trash"></i> Delete</button>
       </div>
@@ -783,13 +969,12 @@ function renderRecords() {
   `).join("");
 }
 
-/* Debounced search rendering */
 function scheduleRender() {
   clearTimeout(renderDebounceTimer);
   renderDebounceTimer = setTimeout(renderRecords, 180);
 }
 
-/* ── Firebase Listener ─────────────────────────────────── */
+/* ── Firebase Listener ── */
 function startRecordsListener() {
   if (recordsListenerStarted) return;
   recordsListenerStarted = true;
@@ -806,7 +991,7 @@ function startRecordsListener() {
   });
 }
 
-/* ── Event Delegation ──────────────────────────────────── */
+/* ── Event Delegation ── */
 document.addEventListener("click", async (event) => {
   const btn = event.target.closest("[data-edit], [data-del], [data-qr]");
   if (!btn) return;
@@ -815,8 +1000,24 @@ document.addEventListener("click", async (event) => {
   const deleteId = btn.dataset.del;
   const qrId     = btn.dataset.qr;
 
-  if (editId)   fillForm(editId, allRecords[editId]);
-  if (qrId)     showQR(qrId);
+  if (editId) {
+    const record = allRecords[editId];
+    if (record && isEditLocked(record)) {
+      showLockedPopup("তৈরি হওয়ার ১ ঘণ্টা পর এই তথ্যটি Edit-এর জন্য Locked হয়ে গেছে।");
+    } else {
+      fillForm(editId, record);
+    }
+  }
+
+  if (qrId) {
+    const record = allRecords[qrId];
+    if (!record) return;
+    if (qrLockEnabled && !record.paid) {
+      showLockedPopup("এই রেকর্ডটি বর্তমানে Unpaid/Locked অবস্থায় রয়েছে। আপনার বন্ধুর বিকাশ অ্যাকাউন্টে পেমেন্ট পাঠানোর সঙ্গে সঙ্গেই রেকর্ডটি স্বয়ংক্রিয়ভাবে Unlock হয়ে যাবে। এরপর আপনি QR Code/Link দেখতে পারবেন। আপনার বন্ধুর কিছুটা আর্থিক সমস্যার কারণে সাময়িকভাবে এই ব্যবস্থা করা হয়েছে। এ কারণে আপনাকে সাময়িক অসুবিধার সম্মুখীন হতে হওয়ায় আমরা আন্তরিকভাবে দুঃখিত এবং আপনার সহযোগিতার জন্য কৃতজ্ঞ। ❤️");
+    } else {
+      showQR(qrId);
+    }
+  }
 
   if (deleteId) {
     if (!confirm("এই তথ্য Delete করবেন? এই কাজ undo করা যাবে না।")) return;
@@ -857,7 +1058,6 @@ $("copyLinkBtn").addEventListener("click", async () => {
     await navigator.clipboard.writeText(link);
     showToast("✓ Link copy হয়েছে");
   } catch {
-    // Fallback for older browsers
     const ta = document.createElement("textarea");
     ta.value = link;
     ta.style.cssText = "position:fixed;top:-999px;opacity:0;";
@@ -873,7 +1073,7 @@ $("copyLinkBtn").addEventListener("click", async () => {
   }
 });
 
-/* ── Session Restore ───────────────────────────────────── */
+/* ── Session Restore ── */
 if (sessionStorage.getItem(SESSION_KEY) === "yes") {
   unlockAdmin(true);
 }
